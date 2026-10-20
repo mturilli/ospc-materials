@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Three Policies, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Three Policies, Step by Step</h1>
+      <p>The animation from Lecture 11, one step at a time. Same jobs, same numbers as the video.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start. Click a timeline to jump to that moment.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the model</h2>
+    <p>These are the schedules used on the slides and in the video. Three jobs arrive together at t = 0, in the order A, B, C. A needs 100 s of CPU, B and C need 10 s each, and none of them does I/O. A step is a moment when a scheduler picks a job: a job starts, finishes, or its time slice ends. When only one job is left and it keeps running, nothing is decided, so that is not a step.</p>
+    <p>All jobs arrive at 0, so the response time of a job is the time of its first run, and its turnaround time is the time it is done. Both columns on the right show them as they happen.</p>
+    <p><b>SJF.</b> B and C need the same time, so B runs first because it is first in line. SJF knows how long each job will run, which a real OS does not.</p>
+    <p><b>Round Robin.</b> Each slice is 1 s. A job whose slice is over goes to the back of the queue. Here a switch between jobs takes no time; on a real system each switch costs some time, as the slide on time slices shows.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"sched-policies","views":{"policies":{"steps":[{"t":0,"label":"0 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",true],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",true],["RR","0 s","A is first in the queue: it runs for one slice of 1 s.",true]]},{"t":1,"label":"1 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","1 s","A's slice is over: A goes to the back of the queue. B runs for the first time, after waiting 1 s.",true]]},{"t":2,"label":"2 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","2 s","B's slice is over: B goes to the back of the queue. C runs for the first time, after waiting 2 s.",true]]},{"t":3,"label":"3 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","3 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":4,"label":"4 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","4 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":5,"label":"5 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","5 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":6,"label":"6 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","6 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":7,"label":"7 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","7 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":8,"label":"8 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","8 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":9,"label":"9 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","0 s","B and C are the shortest (10 s); B is first in line, so it runs.",false],["RR","9 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":10,"label":"10 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",true],["RR","10 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":11,"label":"11 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","11 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":12,"label":"12 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","12 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":13,"label":"13 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","13 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":14,"label":"14 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","14 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":15,"label":"15 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","15 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":16,"label":"16 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","16 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":17,"label":"17 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","17 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":18,"label":"18 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","18 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":19,"label":"19 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","10 s","B is done at 10 s. C is the shortest job waiting (10 s): it runs, after waiting 10 s.",false],["RR","19 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":20,"label":"20 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",true],["RR","20 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":21,"label":"21 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","21 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":22,"label":"22 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","22 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":23,"label":"23 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","23 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":24,"label":"24 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","24 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":25,"label":"25 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","25 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":26,"label":"26 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","26 s","B's slice is over: B goes to the back of the queue. C runs.",true]]},{"t":27,"label":"27 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","27 s","C's slice is over: C goes to the back of the queue. A runs.",true]]},{"t":28,"label":"28 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","28 s","A's slice is over: A goes to the back of the queue. B runs.",true]]},{"t":29,"label":"29 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","29 s","B is done at 29 s. C runs.",true]]},{"t":30,"label":"30 s","rows":[["FIFO","0 s","A is first in line: it runs until it is done.",false],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","30 s","C is done at 30 s. A is the only job left: it runs, one slice after another.",true]]},{"t":100,"label":"100 s","rows":[["FIFO","100 s","A is done at 100 s. B is first in line: it starts after waiting 100 s and runs until it is done.",true],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","30 s","C is done at 30 s. A is the only job left: it runs, one slice after another.",false]]},{"t":110,"label":"110 s","rows":[["FIFO","110 s","B is done at 110 s. C is the only job left: it runs, after waiting 110 s.",true],["SJF","20 s","C is done at 20 s. A is the only job left: it runs, after waiting 20 s.",false],["RR","30 s","C is done at 30 s. A is the only job left: it runs, one slice after another.",false]]},{"t":120,"label":"120 s","rows":[["FIFO","120 s","C is done at 120 s. Averages: turnaround 110.0 s, response 70.0 s.",true],["SJF","120 s","A is done at 120 s. Averages: turnaround 50.0 s, response 10.0 s.",true],["RR","120 s","A is done at 120 s. Averages: turnaround 59.7 s, response 1.0 s.",true]]}]}},"jobs":[["A",100],["B",10],["C",10]],"rows":[{"name":"FIFO","label":"FIFO","segs":[["A",0.0,100.0],["B",100.0,110.0],["C",110.0,120.0]],"states":[["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["A","BC"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["B","C"],["C",""],["C",""],["C",""],["C",""],["C",""],["C",""],["C",""],["C",""],["C",""],["C",""],[null,""]],"first":[[0.0,"0 s"],[100.0,"100 s"],[110.0,"110 s"]],"done":[[100.0,"100 s"],[110.0,"110 s"],[120.0,"120 s"]],"avg":[110.0,70.0,"turnaround 110.0 s","response 70.0 s"],"best":[false,false]},{"name":"SJF","label":"SJF","segs":[["B",0.0,10.0],["C",10.0,20.0],["A",20.0,120.0]],"states":[["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["B","CA"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["C","A"],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],[null,""]],"first":[[20.0,"20 s"],[0.0,"0 s"],[10.0,"10 s"]],"done":[[120.0,"120 s"],[10.0,"10 s"],[20.0,"20 s"]],"avg":[50.0,10.0,"turnaround 50.0 s","response 10.0 s"],"best":[true,false]},{"name":"RR","label":"Round Robin, 1 s slices","segs":[["A",0.0,1.0],["B",1.0,2.0],["C",2.0,3.0],["A",3.0,4.0],["B",4.0,5.0],["C",5.0,6.0],["A",6.0,7.0],["B",7.0,8.0],["C",8.0,9.0],["A",9.0,10.0],["B",10.0,11.0],["C",11.0,12.0],["A",12.0,13.0],["B",13.0,14.0],["C",14.0,15.0],["A",15.0,16.0],["B",16.0,17.0],["C",17.0,18.0],["A",18.0,19.0],["B",19.0,20.0],["C",20.0,21.0],["A",21.0,22.0],["B",22.0,23.0],["C",23.0,24.0],["A",24.0,25.0],["B",25.0,26.0],["C",26.0,27.0],["A",27.0,28.0],["B",28.0,29.0],["C",29.0,30.0],["A",30.0,31.0],["A",31.0,32.0],["A",32.0,33.0],["A",33.0,34.0],["A",34.0,35.0],["A",35.0,36.0],["A",36.0,37.0],["A",37.0,38.0],["A",38.0,39.0],["A",39.0,40.0],["A",40.0,41.0],["A",41.0,42.0],["A",42.0,43.0],["A",43.0,44.0],["A",44.0,45.0],["A",45.0,46.0],["A",46.0,47.0],["A",47.0,48.0],["A",48.0,49.0],["A",49.0,50.0],["A",50.0,51.0],["A",51.0,52.0],["A",52.0,53.0],["A",53.0,54.0],["A",54.0,55.0],["A",55.0,56.0],["A",56.0,57.0],["A",57.0,58.0],["A",58.0,59.0],["A",59.0,60.0],["A",60.0,61.0],["A",61.0,62.0],["A",62.0,63.0],["A",63.0,64.0],["A",64.0,65.0],["A",65.0,66.0],["A",66.0,67.0],["A",67.0,68.0],["A",68.0,69.0],["A",69.0,70.0],["A",70.0,71.0],["A",71.0,72.0],["A",72.0,73.0],["A",73.0,74.0],["A",74.0,75.0],["A",75.0,76.0],["A",76.0,77.0],["A",77.0,78.0],["A",78.0,79.0],["A",79.0,80.0],["A",80.0,81.0],["A",81.0,82.0],["A",82.0,83.0],["A",83.0,84.0],["A",84.0,85.0],["A",85.0,86.0],["A",86.0,87.0],["A",87.0,88.0],["A",88.0,89.0],["A",89.0,90.0],["A",90.0,91.0],["A",91.0,92.0],["A",92.0,93.0],["A",93.0,94.0],["A",94.0,95.0],["A",95.0,96.0],["A",96.0,97.0],["A",97.0,98.0],["A",98.0,99.0],["A",99.0,100.0],["A",100.0,101.0],["A",101.0,102.0],["A",102.0,103.0],["A",103.0,104.0],["A",104.0,105.0],["A",105.0,106.0],["A",106.0,107.0],["A",107.0,108.0],["A",108.0,109.0],["A",109.0,110.0],["A",110.0,111.0],["A",111.0,112.0],["A",112.0,113.0],["A",113.0,114.0],["A",114.0,115.0],["A",115.0,116.0],["A",116.0,117.0],["A",117.0,118.0],["A",118.0,119.0],["A",119.0,120.0]],"states":[["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","AB"],["A","BC"],["B","CA"],["C","A"],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],["A",""],[null,""]],"first":[[0.0,"0 s"],[1.0,"1 s"],[2.0,"2 s"]],"done":[[120.0,"120 s"],[29.0,"29 s"],[30.0,"30 s"]],"avg":[59.666666666666664,1.0,"turnaround 59.7 s","response 1.0 s"],"best":[false,true]}]};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Three policies, same jobs: the frame of policies_video() in make_videos.py, at any time t (s).
+const TMAX = 120;
+const px0 = 300, px1 = 1040, pscale = (px1 - px0) / TMAX;
+const ys = [190, 340, 490], barH = 46;
+
+function drawPolicies(t) {
+  text(60, 52, "Three policies, same jobs", { fs: 30 });
+  text(60, 95, "A needs 100 s, B and C need 10 s, all arrive at t = 0", { fs: 17, color: INK_2 });
+  text(W - 60, 52, `t = ${t.toFixed(1).padStart(5)} s`, { fs: 26, ha: "right", mono: true });
+  // time axis
+  for (let k = 0; k <= TMAX; k += 20) {
+    const xx = px0 + k * pscale;
+    line(xx, ys[0] - 30, xx, ys[2] + barH + 6, { color: GRID });
+    text(xx, ys[2] + barH + 26, `${k}`, { fs: 13, color: MUTED, ha: "center" });
+  }
+  text(px1, ys[2] + barH + 52, "time (s)", { fs: 13, color: MUTED, ha: "right" });
+  text(px1 + 48, ys[0] - 46, "first run", { fs: 14, color: MUTED });
+  text(px1 + 140, ys[0] - 46, "done", { fs: 14, color: MUTED });
+  DATA.rows.forEach((row, i) => {
+    const y = ys[i];
+    text(px0 - 20, y + barH / 2, row.label, { fs: 17, ha: "right" });
+    box(px0, y, px1 - px0, barH, "#ffffff", GRID);
+    for (const [job, a, b] of row.segs) {
+      if (a >= t) continue;
+      const e = Math.min(b, t);
+      rect(px0 + a * pscale, y, (e - a) * pscale, barH, { fill: JOB[job], stroke: "#ffffff", lw: 0.6 });
+      if ((e - a) * pscale > 26) text(px0 + (a + e) / 2 * pscale, y + barH / 2, job, { fs: 14, ha: "center" });
+    }
+    // who runs now, and who waits (in the order they will run)
+    const [running, waiting] = row.states[Math.min(Math.floor(t + EPS), TMAX)];
+    if (running && t < TMAX) text(px0 + t * pscale + 6, y - 10, `running ${running}`, { fs: 12, color: ORANGE });
+    if (waiting && t < TMAX) {
+      const n = waiting.length, x = px0 - 20 - n * 26 + 4;
+      text(x - 8, y + barH + 19, "waiting", { fs: 12, color: MUTED, ha: "right" });
+      waiting.split("").forEach((j, k) => token(x + k * 26, y + barH + 8, j, 22, { fs: 11 }));
+    }
+    // per-job first run and done, shown when they happen
+    DATA.jobs.forEach(([name], k) => {
+      const yy = y - 14 + k * 24;
+      text(px1 + 22, yy + 12, name, { fs: 16, color: JOB_EDGE[name], bold: true });
+      if (t >= row.first[k][0] - EPS) text(px1 + 48, yy + 12, row.first[k][1], { fs: 16, color: INK_2 });
+      if (t >= row.done[k][0] - EPS) text(px1 + 140, yy + 12, row.done[k][1], { fs: 16, color: INK_2 });
+    });
+  });
+  line(px0 + t * pscale, ys[0] - 34, px0 + t * pscale, ys[2] + barH + 8, { color: ORANGE, lw: 2 });
+  rect(px0, ys[0] - 30, px1 - px0, ys[2] + barH + 36 - ys[0], { cls: "seek" });
+  if (t >= TMAX - EPS) {
+    const yb = 630;
+    text(60, yb - 12, "Averages", { fs: 17, bold: true });
+    DATA.rows.forEach((row, k) => {
+      const xx = 220 + k * 340;
+      text(xx, yb - 24, row.label.split(",")[0], { fs: 15 });
+      text(xx, yb + 2, row.avg[2], { fs: 15, color: INK_2, bold: row.best[0] });
+      text(xx, yb + 28, row.avg[3], { fs: 15, color: INK_2, bold: row.best[1] });
+    });
+  }
+}
+
+const VIEWS = [{
+  id: "policies", label: "Three policies", tmax: TMAX, snap: 0.1, unit: "s",
+  speeds: [0.5, 1, 2, 3, 5, 8, 12, 20], speed: 3, video: "the video runs at 8 s/s",
+  draw: drawPolicies,
+  seek: x => Math.round((x - px0) / pscale * 10) / 10,
+}];
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

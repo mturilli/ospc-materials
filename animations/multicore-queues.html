@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Queues and Cores, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Queues and Cores, Step by Step</h1>
+      <p>The animation from Lecture 11, one step at a time. Same jobs and same results as the video.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>2</kbd> to change view. Click a cell of the timeline to jump to that tick.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the model</h2>
+    <p>These are the two designs of OSTEP chapter 10, in a small model that gives the schedules of the video. Time is counted in ticks, one cell of the timeline. A step is a tick where something is decided: a slice ends, a job finishes, or a core steals a job. Switching jobs takes no time, and the model does not simulate caches: a move to another core only means that the job starts there with a cold cache.</p>
+    <p><b>One queue.</b> Each slice is 1 tick. When the slices end, the four jobs go back to the end of the shared queue in core order (core 0 first), then cores 0 to 3 each take the first job in the queue. On a real system the cores would also wait for each other on the queue's lock.</p>
+    <p><b>One queue per core.</b> Each core runs round robin with slices of 2 ticks. C needs 4 ticks of CPU; A, B and D run past the end. Stealing starts at tick 12, so you can first see the imbalance. From then on, every 4 ticks, the core with fewer jobs takes the first job waiting on the other core and adds it to the back of its own queue. Real schedulers, like Linux's, check more often and look at the load and at the caches before they move a job.</p>
+    <p>In the video, from tick 12 the cores switch jobs every tick, as in the OSTEP figure. Here the slices stay at 2 ticks, so the schedule after tick 12 is a little different: the same jobs move at the same ticks, and A, B and D still get 8 ticks each.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"multicore","views":{"shared":{"tmax":10,"rows":["AEDCBAEDCB","BAEDCBAEDC","CBAEDCBAED","DCBAEDCBAE"],"waiting":["E","D","C","B","A","E","D","C","B","A"],"moves":[[0,0,0,0,0],[1,1,1,0,0],[2,2,1,1,1],[3,2,2,2,2],[3,3,3,3,3],[4,4,4,4,3],[5,5,5,4,4],[6,6,5,5,5],[7,6,6,6,6],[7,7,7,7,7]],"steps":[{"t":0,"label":"tick 0","text":"A, B, C, D and E wait in the shared queue, in this order. Cores 0 to 3 take A, B, C and D; E waits."},{"t":1,"label":"tick 1","text":"The slices end: A, B, C and D go back to the queue, behind E. Cores 0 to 3 take E, A, B and C; D waits. A, B and C each run on a different core than last time, with a cold cache."},{"t":2,"label":"tick 2","text":"The slices end: E, A, B and C go back to the queue, behind D. Cores 0 to 3 take D, E, A and B; C waits. D, E, A and B each run on a different core than last time, with a cold cache."},{"t":3,"label":"tick 3","text":"The slices end: D, E, A and B go back to the queue, behind C. Cores 0 to 3 take C, D, E and A; B waits. C, D, E and A each run on a different core than last time, with a cold cache."},{"t":4,"label":"tick 4","text":"The slices end: C, D, E and A go back to the queue, behind B. Cores 0 to 3 take B, C, D and E; A waits. B, C, D and E each run on a different core than last time, with a cold cache."},{"t":5,"label":"tick 5","text":"The slices end: B, C, D and E go back to the queue, behind A. Cores 0 to 3 take A, B, C and D; E waits. A, B, C and D each run on a different core than last time, with a cold cache."},{"t":6,"label":"tick 6","text":"The slices end: A, B, C and D go back to the queue, behind E. Cores 0 to 3 take E, A, B and C; D waits. E, A, B and C each run on a different core than last time, with a cold cache."},{"t":7,"label":"tick 7","text":"The slices end: E, A, B and C go back to the queue, behind D. Cores 0 to 3 take D, E, A and B; C waits. D, E, A and B each run on a different core than last time, with a cold cache."},{"t":8,"label":"tick 8","text":"The slices end: D, E, A and B go back to the queue, behind C. Cores 0 to 3 take C, D, E and A; B waits. C, D, E and A each run on a different core than last time, with a cold cache."},{"t":9,"label":"tick 9","text":"The slices end: C, D, E and A go back to the queue, behind B. Cores 0 to 3 take B, C, D and E; A waits. B, C, D and E each run on a different core than last time, with a cold cache."},{"t":10,"label":"tick 10","text":"After 10 ticks, each job has run for 8 ticks and changed core 7 times. Every job keeps changing core, so it keeps starting with a cold cache."}],"end":"Every job keeps changing core, so it keeps starting with a cold cache."},"percore":{"tmax":24,"rows":["AACCAACCAAAAAAAAAABBBBBB","BBDDBBDDBBDDBBDDDDDDDDAA"],"queues":[["C","D"],["C","D"],["A","B"],["A","B"],["C","D"],["C","D"],["A","B"],["A","B"],["","D"],["","D"],["","B"],["","B"],["","D"],["","D"],["","B"],["","B"],["B",""],["B",""],["A",""],["A",""],["","A"],["","A"],["","D"],["","D"]],"steals":[[16,"B",0],[20,"A",1]],"bounds":[8,12],"steps":[{"t":0,"label":"tick 0","text":"Core 0's queue has A and C, core 1's has B and D. Each core runs round robin, with slices of 2 ticks. Core 0 runs A, core 1 runs B."},{"t":2,"label":"tick 2","text":"The slices end: A goes to the back of core 0's queue, B to the back of core 1's. Core 0 runs C, core 1 runs D."},{"t":4,"label":"tick 4","text":"The slices end: C goes to the back of core 0's queue, D to the back of core 1's. Core 0 runs A, core 1 runs B."},{"t":6,"label":"tick 6","text":"The slices end: A goes to the back of core 0's queue, B to the back of core 1's. Core 0 runs C, core 1 runs D."},{"t":8,"label":"tick 8","text":"C is done on core 0, after 4 ticks of CPU, and A runs. D's slice ends: it goes to the back of core 1's queue, and B runs. Core 0 now has only A, while core 1 has B and D."},{"t":10,"label":"tick 10","text":"A's slice ends, but nothing else waits on core 0: A runs again. B's slice ends: it goes to the back of core 1's queue, and D runs."},{"t":12,"label":"tick 12","text":"Stealing starts: from now on, every 4 ticks, the core with fewer jobs takes the first job waiting on the other core. A's slice ends, but nothing else waits on core 0: A runs again. D's slice ends: it goes to the back of core 1's queue, and B runs."},{"t":14,"label":"tick 14","text":"A's slice ends, but nothing else waits on core 0: A runs again. B's slice ends: it goes to the back of core 1's queue, and D runs."},{"t":16,"label":"tick 16","text":"The slices end: A goes to the back of core 0's queue, D to the back of core 1's. Check: core 0 has 1 job, core 1 has 2. Core 0 steals B, the first job waiting on core 1, and adds it to the back of its own queue. Core 0 runs A, core 1 runs D."},{"t":18,"label":"tick 18","text":"A's slice ends: it goes to the back of core 0's queue, and B runs (its first time on core 0). D's slice ends, but nothing else waits on core 1: D runs again."},{"t":20,"label":"tick 20","text":"The slices end: B goes to the back of core 0's queue, D to the back of core 1's. Check: core 0 has 2 jobs, core 1 has 1. Core 1 steals A, the first job waiting on core 0, and adds it to the back of its own queue. Core 0 runs B, core 1 runs D."},{"t":22,"label":"tick 22","text":"B's slice ends, but nothing else waits on core 0: B runs again. D's slice ends: it goes to the back of core 1's queue, and A runs (its first time on core 1)."},{"t":24,"label":"tick 24","text":"Ticks 8 to 11, without stealing: A ran for 4 ticks, B and D for 2 ticks each. From tick 12, with stealing: A, B and D ran for 8 ticks each."}],"phases":["Queues: core 0 has A and C, core 1 has B and D.","C finished. A has core 0 to itself; B and D share core 1.","Stealing: every 4 ticks, the core with fewer jobs takes one from the other."],"end":"After stealing: A, B and D get 8 ticks each."}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Queues and cores in motion: the two scenes of multicore_video() in make_videos.py, at any time t (ticks).
+const SH = DATA.views.shared, PC = DATA.views.percore;
+
+function base(title, sub, t) {
+  text(60, 52, title, { fs: 30 });
+  text(60, 95, sub, { fs: 17, color: INK_2 });
+  text(W - 60, 52, `t = ${t.toFixed(1).padStart(4)} ticks`, { fs: 24, ha: "right", mono: true });
+}
+// one row of cells per core; the cell being run now has an orange outline and fills as time goes by
+function cells(rows, t, g) {
+  const n = rows[0].length, now = Math.floor(t + EPS), w = g.cw - g.pad;
+  rows.forEach((row, c) => {
+    const y = g.gy + c * (g.ch + g.gap);
+    text(g.gx - 20, y + g.ch / 2, `Core ${c}`, { fs: 17, ha: "right" });
+    for (let s = 0; s < n; s++) {
+      const x = g.gx + s * g.cw, j = row[s];
+      if (s < now) box(x, y, w, g.ch, JOB[j]);
+      else box(x, y, w, g.ch, "#ffffff", GRID);
+      if (s === now) {
+        rect(x, y, (t - s) * w, g.ch, { fill: JOB[j] });
+        rect(x + 1.5, y + 1.5, w - 3, g.ch - 3, { stroke: ORANGE, lw: 2 });
+      }
+      if (s <= now) text(x + w / 2, y + g.ch / 2, j, { fs: g.fs, ha: "center" });
+    }
+  });
+  const yb = g.gy + rows.length * (g.ch + g.gap) - g.gap;
+  for (let s = 0; s < n; s++) text(g.gx + s * g.cw + w / 2, yb + 14, `${s}`, { fs: 11, color: MUTED, ha: "center" });
+  rect(g.gx, g.gy, n * g.cw, yb + 22 - g.gy, { cls: "seek" });
+}
+const seekCell = (g, n) => x => Math.min(Math.max(Math.floor((x - g.gx) / g.cw), 0), n);
+
+// ---- view 1: one shared queue, five jobs, four cores ----
+const G1 = { gx: 260, gy: 190, cw: 72, ch: 52, gap: 14, pad: 4, fs: 17 };
+function drawShared(t) {
+  const n = SH.tmax, k = Math.min(Math.floor(t + EPS), n - 1);
+  base("One queue for all cores", "Five jobs, four cores. Each core takes the next job from the shared queue.", t);
+  cells(SH.rows, t, G1);
+  const yb = G1.gy + 4 * (G1.ch + 14) + 40;
+  text(G1.gx - 20, yb - 12.5, "Moves to", { fs: 15, color: INK_2, ha: "right" });
+  text(G1.gx - 20, yb + 12.5, "another core", { fs: 15, color: INK_2, ha: "right" });
+  "ABCDE".split("").forEach((j, i) => {
+    const xx = G1.gx + i * 150, m = SH.moves[k][i];
+    box(xx, yb - 18, 36, 36, JOB[j]);
+    text(xx + 18, yb, j, { fs: 16, ha: "center" });
+    text(xx + 48, yb, `${m}`, { fs: 20, color: m ? ORANGE : INK_2 });
+  });
+  text(G1.gx - 20, 580, "Shared queue", { fs: 15, color: INK_2, ha: "right" });
+  SH.waiting[k].split("").forEach((j, i) => token(G1.gx + i * 44, 562, j, 36, { fs: 16 }));
+  if (t >= n - EPS) text(60, 660, SH.end, { fs: 18 });
+}
+
+// ---- view 2: one queue per core, two cores ----
+const G2 = { gx: 200, gy: 200, cw: 40, ch: 56, gap: 16, pad: 3, fs: 15 };
+function drawPerCore(t) {
+  const n = PC.tmax, k = Math.min(Math.floor(t + EPS), n - 1), now = Math.floor(t + EPS);
+  base("One queue per core", "Two cores, each with its own run queue and round robin.", t);
+  const top = G2.gy - 26, bottom = G2.gy + 2 * (G2.ch + 16);
+  PC.bounds.forEach((b, i) => {
+    const xx = G2.gx + b * G2.cw - 2;
+    line(xx, top, xx, bottom, { color: ORANGE, lw: 1.5, dashed: true });
+    text(xx + 6, G2.gy - 30, ["C done", "stealing on"][i], { fs: 13, color: ORANGE });
+  });
+  for (const [b, j, thief] of PC.steals) {
+    if (t < b - EPS) continue;
+    const xx = G2.gx + b * G2.cw - 2;
+    line(xx, top + 6, xx, bottom - 16, { color: ORANGE, lw: 1.2 });
+    text(xx + 6, G2.gy - 30, `${j} to core ${thief}`, { fs: 13, color: ORANGE });
+  }
+  cells(PC.rows, t, G2);
+  text(60, 400, PC.phases[now < 8 ? 0 : now < 12 ? 1 : 2], { fs: 18 });
+  // CPU time since C finished (tick 8), then since stealing started (tick 12)
+  if (t > 8 + EPS) {
+    const start = t <= 12 + EPS ? 8 : 12;
+    text(60, 460, "CPU time in this phase", { fs: 15, color: INK_2 });
+    "ABD".split("").forEach((j, i) => {
+      let used = 0, whole = 0;
+      for (let s = start; s < n; s++) for (const row of PC.rows) if (row[s] === j) {
+        used += Math.min(Math.max(t - s, 0), 1);
+        if (s < now) whole++;
+      }
+      const y = 495 + i * 46;
+      box(120, y, 34, 34, JOB[j]);
+      text(137, y + 17, j, { fs: 16, ha: "center" });
+      box(170, y + 4, used * 26, 26, JOB_EDGE[j]);
+      text(180 + used * 26, y + 17, whole === 1 ? "1 tick" : `${whole} ticks`, { fs: 14, color: INK_2 });
+    });
+  }
+  // the jobs waiting in each core's queue
+  text(700, 460, "Waiting in each queue", { fs: 15, color: INK_2 });
+  [0, 1].forEach(c => {
+    const y = 500 + c * 46;
+    text(700, y, `Core ${c}`, { fs: 15 });
+    PC.queues[k][c].split("").forEach((j, i) => token(780 + i * 40, y - 17, j, 34, { fs: 15 }));
+  });
+  if (t >= n - EPS) text(700, 600, PC.end, { fs: 17 });
+}
+
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];  // ticks per second
+const VIEWS = [
+  { id: "shared", label: "One queue", tmax: SH.tmax, snap: 0.05, unit: "ticks", speeds: SPEEDS, speed: 2,
+    video: "the video runs at about 2.2 ticks/s", draw: drawShared, seek: seekCell(G1, SH.tmax) },
+  { id: "percore", label: "One queue per core", tmax: PC.tmax, snap: 0.05, unit: "ticks", speeds: SPEEDS, speed: 2,
+    video: "the video runs at about 2.2 ticks/s", draw: drawPerCore, seek: seekCell(G2, PC.tmax) },
+];
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
