@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Waiting in the Slurm Queue</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Waiting in the Slurm Queue</h1>
+      <p>Jobs arrive, wait and start on a small partition with 8 CPUs. See why a job that asks for what it uses, with an honest time limit, starts sooner and lets other jobs start sooner too.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>3</kbd> to change view. Click the chart to jump to that minute.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the model</h2>
+    <p><b>The partition.</b> 8 CPUs and nothing else. Our cluster's partitions have two nodes with 512 CPUs each, and memory and GPUs count too, but the rules are the same.</p>
+    <p><b>The order of the queue.</b> Here it is the order in which jobs arrive. On our cluster Slurm also counts fair share: users who ran a lot recently move down the queue. <code>sprio</code> shows a pending job's priority.</p>
+    <p><b>Slurm plans with time limits.</b> It never knows how long a job will really run, so it assumes every job runs until its time limit. A job that reaches its limit is stopped (state TIMEOUT), so ask for the time you expect plus a margin. Without <code>--time</code>, a job gets the partition's default: 4 hours on <code>cpu</code> and <code>gpu</code>, 2 hours on <code>interactive</code>.</p>
+    <p><b>Reservations and backfill.</b> The first job in the queue that does not fit waits with reason Resources, and Slurm reserves CPUs for it at the earliest time they will be free. A job further down starts early only if it cannot delay that reservation; the others wait with reason Priority. <code>squeue --start</code> shows the start time Slurm expects for your pending jobs. Slurm repeats this every 30 seconds and can hold a reservation for many jobs at once; with one blocked job at a time, as here, it makes the same choices.</p>
+    <p><b>The table under the chart</b> uses squeue's words: ST is the state (PD pending, R running), TIME the time the job has run so far, and REASON why a pending job waits.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"slurm-queue","cpus":8,"axis":50,"labels":{"ask8":"Asks for 8 CPUs","ask2":"Asks for 2 CPUs","limits":"Time limits"},"views":{"ask8":{"steps":[{"t":0,"label":"minute 0","rows":[["Now","","A arrives, asks for 4 CPUs for 25 minutes, and starts at once: 8 CPUs are free.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":1,"label":"minute 1","rows":[["Now","","B arrives and asks for 8 CPUs for 15 minutes.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 4 are free. Slurm reserves 8 CPUs for it at minute 25, when A reaches its time limit.",true]],"queue":["B"],"reasons":{"B":"Resources"},"resv":{"job":"B","time":25,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":2,"label":"minute 2","rows":[["Now","","C arrives and asks for 2 CPUs for 10 minutes. It is behind B in the queue, but it fits in the free CPUs and, by its time limit, ends at minute 12, before B's reservation at minute 25: C starts now (backfill).",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 2 are free. Slurm reserves 8 CPUs for it at minute 25, when A reaches its time limit.",true]],"queue":["B"],"reasons":{"B":"Resources"},"resv":{"job":"B","time":25,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":4,"label":"minute 4","rows":[["Now","","D arrives and asks for 4 CPUs for 20 minutes.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 2 are free. Slurm reserves 8 CPUs for it at minute 25, when C and A reach their time limits. D waits (Priority): it needs 4 CPUs, 2 are free, and it is behind B.",true]],"queue":["B","D"],"reasons":{"B":"Resources","D":"Priority"},"resv":{"job":"B","time":25,"where":[0,1,2,3,4,5,6,7],"waits":["C","A"]}},{"t":10,"label":"minute 10","rows":[["Now","","C ends after 8 minutes, 2 minutes before its time limit.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 4 are free. Slurm reserves 8 CPUs for it at minute 25, when A reaches its time limit. D waits (Priority): 4 CPUs are free, but Slurm must assume D runs for its whole time limit, 20 minutes, until minute 30: past B's reservation at minute 25.",true]],"queue":["B","D"],"reasons":{"B":"Resources","D":"Priority"},"resv":{"job":"B","time":25,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":20,"label":"minute 20","rows":[["Now","","A ends after 20 minutes, 5 minutes before its time limit. B starts on 8 CPUs that are now free, 5 minutes earlier than the reservation. B keeps only 2 of its 8 CPUs busy. The other 6 sit idle, and no other job can use them.",true],["Waiting","","D waits (Resources): it needs 4 CPUs and no CPUs are free. Slurm reserves 4 CPUs for it at minute 35, when B reaches its time limit.",true]],"queue":["D"],"reasons":{"D":"Resources"},"resv":{"job":"D","time":35,"where":[0,1,2,3],"waits":["B"]}},{"t":30,"label":"minute 30","rows":[["Now","","B ends after 10 minutes, 5 minutes before its time limit. D starts on 4 CPUs that are now free, 5 minutes earlier than the reservation.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":45,"label":"minute 45","rows":[["Now","","D ends after 15 minutes, 5 minutes before its time limit.",true],["Waiting","","No job is waiting.",true],["Result","","Average wait 11.25 minutes; all jobs done at minute 45. 60 CPU-minutes were held but idle.",true]],"queue":[],"reasons":{},"resv":null}],"jobs":[{"name":"A","id":101,"submit":0,"cpus":4,"uses":4,"limit":25,"tl":"25:00","runtime":20,"start":0,"end":20,"where":[0,1,2,3],"wait":0,"state":"COMPLETED"},{"name":"B","id":102,"submit":1,"cpus":8,"uses":2,"limit":15,"tl":"15:00","runtime":10,"start":20,"end":30,"where":[0,1,2,3,4,5,6,7],"wait":19,"state":"COMPLETED"},{"name":"C","id":103,"submit":2,"cpus":2,"uses":2,"limit":10,"tl":"10:00","runtime":8,"start":2,"end":10,"where":[4,5],"wait":0,"state":"COMPLETED"},{"name":"D","id":104,"submit":4,"cpus":4,"uses":4,"limit":20,"tl":"20:00","runtime":15,"start":30,"end":45,"where":[0,1,2,3],"wait":26,"state":"COMPLETED"}],"title":"B asks for 8 CPUs","sub":"Your team's script, B, keeps 2 CPUs busy for 10 minutes, but asks for 8.","team":"B","end":"Average wait 11.25 minutes. All done at minute 45. 60 CPU-minutes held but idle.","tmax":45,"summary":{"rows":[{"name":"A","submit":0,"cpus":4,"uses":4,"limit":25,"runtime":20,"start":0,"end":20,"wait":0,"state":"COMPLETED"},{"name":"B","submit":1,"cpus":8,"uses":2,"limit":15,"runtime":10,"start":20,"end":30,"wait":19,"state":"COMPLETED"},{"name":"C","submit":2,"cpus":2,"uses":2,"limit":10,"runtime":8,"start":2,"end":10,"wait":0,"state":"COMPLETED"},{"name":"D","submit":4,"cpus":4,"uses":4,"limit":20,"runtime":15,"start":30,"end":45,"wait":26,"state":"COMPLETED"}],"end":45,"avg_wait":11.25,"idle_alloc":60,"busy":176,"alloc":236,"capacity":360}},"ask2":{"steps":[{"t":0,"label":"minute 0","rows":[["Now","","A arrives, asks for 4 CPUs for 25 minutes, and starts at once: 8 CPUs are free.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":1,"label":"minute 1","rows":[["Now","","B arrives, asks for 2 CPUs for 15 minutes, and starts at once: 4 CPUs are free.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":2,"label":"minute 2","rows":[["Now","","C arrives, asks for 2 CPUs for 10 minutes, and starts at once: 2 CPUs are free.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":4,"label":"minute 4","rows":[["Now","","D arrives and asks for 4 CPUs for 20 minutes.",true],["Waiting","","D waits (Resources): it needs 4 CPUs and no CPUs are free. Slurm reserves 4 CPUs for it at minute 16, when C and B reach their time limits.",true]],"queue":["D"],"reasons":{"D":"Resources"},"resv":{"job":"D","time":16,"where":[4,5,6,7],"waits":["C","B"]}},{"t":10,"label":"minute 10","rows":[["Now","","C ends after 8 minutes, 2 minutes before its time limit.",true],["Waiting","","D waits (Resources): it needs 4 CPUs and 2 are free. Slurm reserves 4 CPUs for it at minute 16, when B reaches its time limit.",true]],"queue":["D"],"reasons":{"D":"Resources"},"resv":{"job":"D","time":16,"where":[4,5,6,7],"waits":["B"]}},{"t":11,"label":"minute 11","rows":[["Now","","B ends after 10 minutes, 5 minutes before its time limit. D starts on 4 CPUs that are now free, 5 minutes earlier than the reservation.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":20,"label":"minute 20","rows":[["Now","","A ends after 20 minutes, 5 minutes before its time limit.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":26,"label":"minute 26","rows":[["Now","","D ends after 15 minutes, 5 minutes before its time limit.",true],["Waiting","","No job is waiting.",true],["Result","","Average wait 1.75 minutes; all jobs done at minute 26.",true]],"queue":[],"reasons":{},"resv":null}],"jobs":[{"name":"A","id":101,"submit":0,"cpus":4,"uses":4,"limit":25,"tl":"25:00","runtime":20,"start":0,"end":20,"where":[0,1,2,3],"wait":0,"state":"COMPLETED"},{"name":"B","id":102,"submit":1,"cpus":2,"uses":2,"limit":15,"tl":"15:00","runtime":10,"start":1,"end":11,"where":[4,5],"wait":0,"state":"COMPLETED"},{"name":"C","id":103,"submit":2,"cpus":2,"uses":2,"limit":10,"tl":"10:00","runtime":8,"start":2,"end":10,"where":[6,7],"wait":0,"state":"COMPLETED"},{"name":"D","id":104,"submit":4,"cpus":4,"uses":4,"limit":20,"tl":"20:00","runtime":15,"start":11,"end":26,"where":[4,5,6,7],"wait":7,"state":"COMPLETED"}],"title":"B asks for 2 CPUs","sub":"The same jobs, but B asks for the 2 CPUs it uses.","team":"B","end":"Average wait 1.75 minutes. All done at minute 26.","tmax":26,"summary":{"rows":[{"name":"A","submit":0,"cpus":4,"uses":4,"limit":25,"runtime":20,"start":0,"end":20,"wait":0,"state":"COMPLETED"},{"name":"B","submit":1,"cpus":2,"uses":2,"limit":15,"runtime":10,"start":1,"end":11,"wait":0,"state":"COMPLETED"},{"name":"C","submit":2,"cpus":2,"uses":2,"limit":10,"runtime":8,"start":2,"end":10,"wait":0,"state":"COMPLETED"},{"name":"D","submit":4,"cpus":4,"uses":4,"limit":20,"runtime":15,"start":11,"end":26,"wait":7,"state":"COMPLETED"}],"end":26,"avg_wait":1.75,"idle_alloc":0,"busy":176,"alloc":176,"capacity":208}},"limits":{"steps":[{"t":0,"label":"minute 0","rows":[["Now","","A arrives, asks for 6 CPUs for 30 minutes, and starts at once: 8 CPUs are free.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":1,"label":"minute 1","rows":[["Now","","B arrives and asks for 8 CPUs for 20 minutes.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 2 are free. Slurm reserves 8 CPUs for it at minute 30, when A reaches its time limit.",true]],"queue":["B"],"reasons":{"B":"Resources"},"resv":{"job":"B","time":30,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":2,"label":"minute 2","rows":[["Now","","C arrives and asks for 2 CPUs for 10 minutes. It is behind B in the queue, but it fits in the free CPUs and, by its time limit, ends at minute 12, before B's reservation at minute 30: C starts now (backfill).",true],["Waiting","","B waits (Resources): it needs 8 CPUs and no CPUs are free. Slurm reserves 8 CPUs for it at minute 30, when A reaches its time limit.",true]],"queue":["B"],"reasons":{"B":"Resources"},"resv":{"job":"B","time":30,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":3,"label":"minute 3","rows":[["Now","","D arrives and asks for 2 CPUs for 4 hours.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and no CPUs are free. Slurm reserves 8 CPUs for it at minute 30, when C and A reach their time limits. D waits (Priority): it needs 2 CPUs, no CPUs are free, and it is behind B.",true]],"queue":["B","D"],"reasons":{"B":"Resources","D":"Priority"},"resv":{"job":"B","time":30,"where":[0,1,2,3,4,5,6,7],"waits":["C","A"]}},{"t":10,"label":"minute 10","rows":[["Now","","C ends after 8 minutes, 2 minutes before its time limit.",true],["Waiting","","B waits (Resources): it needs 8 CPUs and 2 are free. Slurm reserves 8 CPUs for it at minute 30, when A reaches its time limit. D waits (Priority): 2 CPUs are free, but Slurm must assume D runs for its whole time limit, 4 hours, until minute 250: past B's reservation at minute 30.",true]],"queue":["B","D"],"reasons":{"B":"Resources","D":"Priority"},"resv":{"job":"B","time":30,"where":[0,1,2,3,4,5,6,7],"waits":["A"]}},{"t":25,"label":"minute 25","rows":[["Now","","A ends after 25 minutes, 5 minutes before its time limit. B starts on 8 CPUs that are now free, 5 minutes earlier than the reservation.",true],["Waiting","","D waits (Resources): it needs 2 CPUs and no CPUs are free. Slurm reserves 2 CPUs for it at minute 45, when B reaches its time limit.",true]],"queue":["D"],"reasons":{"D":"Resources"},"resv":{"job":"D","time":45,"where":[0,1],"waits":["B"]}},{"t":40,"label":"minute 40","rows":[["Now","","B ends after 15 minutes, 5 minutes before its time limit. D starts on 2 CPUs that are now free, 5 minutes earlier than the reservation.",true],["Waiting","","No job is waiting.",true]],"queue":[],"reasons":{},"resv":null},{"t":48,"label":"minute 48","rows":[["Now","","D ends after 8 minutes, well before the 4 hours Slurm had to plan for.",true],["Waiting","","No job is waiting.",true],["Result","","Average wait 15.25 minutes; all jobs done at minute 48.",true]],"queue":[],"reasons":{},"resv":null}],"jobs":[{"name":"A","id":101,"submit":0,"cpus":6,"uses":6,"limit":30,"tl":"30:00","runtime":25,"start":0,"end":25,"where":[0,1,2,3,4,5],"wait":0,"state":"COMPLETED"},{"name":"B","id":102,"submit":1,"cpus":8,"uses":8,"limit":20,"tl":"20:00","runtime":15,"start":25,"end":40,"where":[0,1,2,3,4,5,6,7],"wait":24,"state":"COMPLETED"},{"name":"C","id":103,"submit":2,"cpus":2,"uses":2,"limit":10,"tl":"10:00","runtime":8,"start":2,"end":10,"where":[6,7],"wait":0,"state":"COMPLETED"},{"name":"D","id":104,"submit":3,"cpus":2,"uses":2,"limit":240,"tl":"4:00:00","runtime":8,"start":40,"end":48,"where":[0,1],"wait":37,"state":"COMPLETED"}],"title":"Time limits and backfill","sub":"C and D both need 2 CPUs for 8 minutes. C asks for 10 minutes;\nD sets no time limit and gets the partition's default, 4 hours.","team":null,"end":"Average wait 15.25 minutes. All done at minute 48.","tmax":48,"summary":{"rows":[{"name":"A","submit":0,"cpus":6,"uses":6,"limit":30,"runtime":25,"start":0,"end":25,"wait":0,"state":"COMPLETED"},{"name":"B","submit":1,"cpus":8,"uses":8,"limit":20,"runtime":15,"start":25,"end":40,"wait":24,"state":"COMPLETED"},{"name":"C","submit":2,"cpus":2,"uses":2,"limit":10,"runtime":8,"start":2,"end":10,"wait":0,"state":"COMPLETED"},{"name":"D","submit":3,"cpus":2,"uses":2,"limit":240,"runtime":8,"start":40,"end":48,"wait":37,"state":"COMPLETED"}],"end":48,"avg_wait":15.25,"idle_alloc":0,"busy":302,"alloc":302,"capacity":384}}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Waiting in the Slurm queue: an 8-CPU partition at any time t (minutes), replayed from DATA.views.
+const NC = DATA.cpus, AX = DATA.axis;
+const gx0 = 150, gx1 = 1210, gy0 = 162, rowH = 25, rowGap = 5;
+const X = m => gx0 + Math.min(m, AX) / AX * (gx1 - gx0);
+const rowY = c => gy0 + c * (rowH + rowGap);
+const gy1 = rowY(NC) - rowGap;
+const spanH = (a, b) => rowY(b) + rowH - rowY(a);
+
+// contiguous runs of CPU indices, so a job on CPUs 0-3 is drawn as one block
+function runs(where) {
+  const out = [];
+  for (const c of [...where].sort((a, b) => a - b)) {
+    const g = out[out.length - 1];
+    if (g && c === g[1] + 1) g[1] = c; else out.push([c, c]);
+  }
+  return out;
+}
+const mmss = m => { const s = Math.round(m * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const pad = (s, n) => String(s).padEnd(n);
+
+function drawChart(v, st, t) {
+  // lanes, minute grid, axis
+  for (let c = 0; c < NC; c++) {
+    rect(gx0, rowY(c), gx1 - gx0, rowH, { fill: "#ffffff", stroke: GRID });
+    text(gx0 - 12, rowY(c) + rowH / 2, `CPU ${c}`, { fs: 12.5, color: INK_2, ha: "right" });
+  }
+  for (let m = 0; m <= AX; m += 5) {
+    line(X(m), gy0, X(m), gy1, { color: GRID });
+    text(X(m), gy1 + 16, `${m}`, { fs: 12, color: MUTED, ha: "center" });
+  }
+  text((gx0 + gx1) / 2, gy1 + 38, "minutes", { fs: 12.5, color: INK_2, ha: "center" });
+  // arrivals above the chart
+  for (const j of v.jobs) if (j.submit <= t + EPS) {
+    line(X(j.submit), gy0 - 12, X(j.submit), gy0, { color: AXIS });
+    token(X(j.submit) - 9, gy0 - 32, j.name, 18, { fs: 11 });
+  }
+  // the reservation of the job that waits for Resources
+  const r = st.resv, rj = r && v.jobs.find(j => j.name === r.job);
+  if (rj && rj.start > t + EPS) {
+    const x0 = X(r.time), x1 = X(r.time + rj.limit);
+    for (const [a, b] of runs(r.where)) {
+      rect(x0, rowY(a), x1 - x0, spanH(a, b), { fill: JOB[rj.name], alpha: 0.25 });
+      rect(x0 + 1, rowY(a) + 1, x1 - x0 - 2, spanH(a, b) - 2, { stroke: JOB_EDGE[rj.name], lw: 2, dash: "3 3" });
+    }
+    const [a, b] = runs(r.where)[0];
+    text((x0 + x1) / 2, rowY(a) + spanH(a, b) / 2, `${rj.name} reserved`, { fs: 13, ha: "center" });
+  }
+  // jobs: solid where the CPUs are busy, pale where they are held but idle, dashed out to the time limit
+  for (const j of v.jobs) {
+    if (j.start === null || j.start > t + EPS) continue;
+    const e = Math.min(t, j.end), x0 = X(j.start), w = X(e) - x0;
+    const used = runs(j.where.slice(0, j.uses)), idle = runs(j.where.slice(j.uses));
+    for (const [a, b] of used) rect(x0, rowY(a), w, spanH(a, b), { fill: JOB[j.name] });
+    for (const [a, b] of idle) {
+      rect(x0, rowY(a), w, spanH(a, b), { fill: JOB[j.name], alpha: 0.3 });
+      if (w > 130) text(x0 + w / 2, rowY(a) + spanH(a, b) / 2, "held, idle", { fs: 13, color: INK_2, ha: "center" });
+    }
+    const [a, b] = used[0];
+    if (w > 16) text(x0 + w / 2, rowY(a) + spanH(a, b) / 2, j.name, { fs: 14, ha: "center" });
+    if (t < j.end - EPS) {
+      const lim = j.start + j.limit, xl = X(lim);
+      for (const [p, q] of runs(j.where))
+        rect(x0 + w, rowY(p) + 1, Math.max(xl - x0 - w - 1, 0), spanH(p, q) - 2, { stroke: JOB_EDGE[j.name], lw: 1.5, dash: "6 4" });
+      if (lim > AX) text(gx1 - 8, rowY(a) + spanH(a, b) / 2, `time limit ${j.tl} →`, { fs: 12, color: INK_2, ha: "right" });
+    }
+  }
+  // a job waiting for Priority that fits in the free CPUs: where it would run if it started now
+  const busy = new Set(v.jobs.filter(q => q.start !== null && q.start <= t + EPS && q.end > t + EPS).flatMap(q => q.where));
+  const freeRows = [...Array(NC).keys()].filter(c => !busy.has(c));
+  for (const name of st.queue) {
+    const j = v.jobs.find(q => q.name === name);
+    if (st.reasons[name] !== "Priority" || j.cpus > freeRows.length) continue;
+    const rows = freeRows.slice(0, j.cpus), x0 = X(t), x1 = X(t + j.limit);
+    for (const [a, b] of runs(rows)) rect(x0, rowY(a) + 1, x1 - x0, spanH(a, b) - 2, { stroke: INK_2, lw: 1.3, dash: "2 3" });
+    const [a, b] = runs(rows)[0];
+    text(x0 + 8, rowY(a) + spanH(a, b) / 2, `${name} if it started now`, { fs: 12.5, color: INK_2 });
+    if (t + j.limit > AX) text(gx1 - 8, rowY(a) + spanH(a, b) / 2, `time limit ${j.tl} →`, { fs: 12, color: INK_2, ha: "right" });
+  }
+  if (t < v.tmax - EPS || t > 0) line(X(t), gy0 - 6, X(t), gy1 + 4, { color: ORANGE, lw: 2 });
+  rect(gx0, gy0 - 36, gx1 - gx0, gy1 - gy0 + 60, { cls: "seek" });
+}
+
+// squeue as students see it in the terminal, at time t
+function drawSqueue(v, st, t) {
+  const x = 60, y = 500;
+  text(x, y - 30, "$ squeue", { fs: 14, mono: true, color: INK_2 });
+  const head = pad("JOBID", 7) + pad("NAME", 6) + pad("ST", 4) + pad("CPUS", 6) + pad("TIME_LIMIT", 12) + pad("TIME", 7) + "REASON";
+  text(x, y, head, { fs: 13, mono: true, color: INK_2 });
+  let i = 0;
+  for (const j of v.jobs) {
+    if (j.submit > t + EPS || j.end <= t + EPS) continue;
+    const run = j.start <= t + EPS;
+    const s = pad(j.id, 7) + pad(j.name, 6) + pad(run ? "R" : "PD", 4) + pad(j.cpus, 6) + pad(j.tl, 12)
+      + pad(run ? mmss(t - j.start) : "0:00", 7) + (run ? "None" : st.reasons[j.name] || "");
+    text(x, y + 28 + i * 26, s, { fs: 13, mono: true });
+    i++;
+  }
+  if (!i) text(x, y + 28, "(no jobs)", { fs: 13, mono: true, color: MUTED });
+}
+
+// what each job asks for, what it really needs, and how long it waited
+function drawJobs(v, t) {
+  const x = 640, y = 470, cols = [x, x + 135, x + 230, x + 330, 1220];
+  ["Job", "Asks for", "Time limit", "Really needs", "Waited"].forEach((h, k) =>
+    text(cols[k], y, h, { fs: 12.5, color: MUTED, ha: k === 4 ? "right" : "start" }));
+  [...v.jobs].sort((p, q) => p.name < q.name ? -1 : 1).forEach((j, i) => {
+    const yy = y + 30 + i * 30;
+    token(x, yy - 11, j.name, 22, { fs: 12 });
+    if (v.team === j.name) text(x + 30, yy, "your team", { fs: 12, color: INK_2 });
+    text(cols[1], yy, `${j.cpus} CPUs`, { fs: 14 });
+    text(cols[2], yy, j.limit >= 60 ? `${j.limit / 60} hours` : `${j.limit} min`, { fs: 14 });
+    text(cols[3], yy, `${j.uses} CPUs, ${j.runtime} min`, { fs: 14 });
+    let w = "", col = INK;
+    if (j.start <= t + EPS) w = `${j.wait} min`;
+    else if (j.submit <= t + EPS) { w = `${Math.floor(t - j.submit + EPS)} min…`; col = MUTED; }
+    text(cols[4], yy, w, { fs: 14, ha: "right", color: col });
+  });
+}
+
+function drawView(id, t) {
+  const v = DATA.views[id], st = latest(v.steps, t);
+  text(60, 52, v.title, { fs: 30 });
+  v.sub.split("\n").forEach((s, i) => text(60, 90 + i * 24, s, { fs: 15.5, color: INK_2 }));
+  text(W - 60, 52, `t = ${t.toFixed(1).padStart(4)} min`, { fs: 22, ha: "right", mono: true });
+  drawChart(v, st, t);
+  drawSqueue(v, st, t);
+  drawJobs(v, t);
+  if (t >= v.tmax - EPS) text(60, 664, v.end, { fs: 16 });
+}
+
+const SPEEDS = [0.5, 1, 2, 3, 5, 8];  // minutes per second
+const VIEWS = Object.keys(DATA.views).map(id => ({
+  id, label: DATA.labels[id], tmax: DATA.views[id].tmax, snap: 0.1, unit: "min", speeds: SPEEDS, speed: 2, video: "",
+  draw: t => drawView(id, t),
+  seek: x => Math.min(Math.max((x - gx0) / (gx1 - gx0) * AX, 0), DATA.views[id].tmax),
+}));
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

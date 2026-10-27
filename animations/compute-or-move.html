@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Compute or Move?</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Compute or Move?</h1>
+      <p>How fast an operation runs depends on how much work it does for every byte it moves. Two limits, measured on our cluster, predict where each operation lands.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>2</kbd> to change view. Click the chart to pick an operation.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements</h2>
+    <p><b>CPU.</b> haskell (AMD EPYC 9755), a 4-CPU batch job like the ones of Exercise 2, NumPy in float64, as in Exercise 1. Each time is the best of 7 repeats with <code>timeit</code> (job 25134, 27 October 2026). The vectors have 10 million numbers (80 MB each), more than the caches hold.</p>
+    <p><b>Bytes moved</b> are the least an operation must read and write: every input once, the result once. <code>a + b</code> reads 160 MB and writes 80 MB. A real program can move more (temporary arrays, cache misses), never less.</p>
+    <p><b>The limits</b> are the best this job measured, not the hardware's data sheet. Memory: a 4,000 × 4,000 matrix times a vector, which reads the 128 MB matrix with 4 threads. Compute: a 4,000 × 4,000 matrix product. A chart like this is called a roofline: no point can go above the roof.</p>
+    <p><b>GPU.</b> fortran, the node of the GPU page (an NVIDIA RTX PRO 6000 Blackwell), in float64 so it compares with the CPU. The GPU's memory limit is <code>a + b</code> on 500 million numbers; smaller arrays fit in the GPU's cache and read faster. The PCIe limit is copying in and back out, both ways, for the largest arrays. Here the matrix product multiplies two different matrices, <code>a @ b</code>, as on the GPU page.</p>
+    <p><b>Try it yourself.</b> In a batch job, time <code>a + b</code> and <code>a @ a</code> as in Exercise 1, divide the operations by the time, and put your points on the chart.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"compute-or-move","views":{"cpu":{"title":"One node's CPUs (a 4-CPU job)","sub":"haskell, float64, as in Exercise 1. Each point is one operation.","roofs":{"mem":39.62366533936468,"peak":219.97344552182915,"core":105.28118427269183},"points":[{"k":1,"label":"a + b","x":0.041666666666666664,"y":1.0664562084357478,"limit":1.6509860558068614,"one":false,"kind":"cpu"},{"k":2,"label":"a.sum()","x":0.125,"y":3.414489464811851,"limit":4.952958167420585,"one":false,"kind":"cpu"},{"k":3,"label":"matrix × vector","x":0.25,"y":9.90591633484117,"limit":9.90591633484117,"one":false,"kind":"cpu"},{"k":4,"label":"a @ a, 250","x":31.25,"y":179.44300880402653,"limit":219.97344552182915,"one":false,"kind":"cpu"},{"k":5,"label":"a @ a, 500","x":62.5,"y":167.3527457783037,"limit":219.97344552182915,"one":false,"kind":"cpu"},{"k":6,"label":"a @ a, 1,000","x":125.0,"y":198.49858850253128,"limit":219.97344552182915,"one":false,"kind":"cpu"},{"k":7,"label":"a @ a, 2,000","x":250.0,"y":209.2339574281956,"limit":219.97344552182915,"one":false,"kind":"cpu"},{"k":8,"label":"a @ a, 4,000","x":500.0,"y":219.97344552182915,"limit":219.97344552182915,"one":false,"kind":"cpu"},{"k":9,"label":"a @ a, 2,000, 1 thread","x":250.0,"y":102.6921663010411,"limit":105.28118427269183,"one":true,"kind":"cpu"}],"steps":[{"t":0,"label":"the limits","rows":[["Memory","40 GB/s","the fastest this 4-CPU job read memory: a matrix times a vector, 4 threads.",true],["Compute","220 GFLOP/s","the fastest it computed: a 4,000 × 4,000 matrix product.",true],["Limit","","An operation that does I operations per byte moved can go no faster than 40 GB/s × I, and never faster than 220 GFLOP/s. The two lines meet at 5.6 operations per byte.",true]]},{"t":1,"label":"point 1","rows":[["Operation","9.4 ms","a + b on 10 million numbers; reads a and b, writes the sum: 10 million operations on 240 MB, 0.0417 operations per byte.",true],["Limit","1.7 GFLOP/s","memory-bound: 40 GB/s × 0.0417 operations per byte.",true],["Measured","1.1 GFLOP/s","65% of the limit. NumPy adds on one core, and one core moves about 26 GB/s, not 40.",true]]},{"t":2,"label":"point 2","rows":[["Operation","2.9 ms","a.sum() on 10 million numbers; reads a: 10 million operations on 80 MB, 0.125 operations per byte.",true],["Limit","5.0 GFLOP/s","memory-bound: 40 GB/s × 0.125 operations per byte.",true],["Measured","3.4 GFLOP/s","69% of the limit. One core again: 27 GB/s.",true]]},{"t":3,"label":"point 3","rows":[["Operation","3.2 ms","a 4,000 × 4,000 matrix times a vector; reads the matrix once: 32 million operations on 128 MB, 0.25 operations per byte.",true],["Limit","9.9 GFLOP/s","memory-bound: 40 GB/s × 0.25 operations per byte.",true],["Measured","9.9 GFLOP/s","100% of the limit. OpenBLAS reads the matrix with 4 threads: this operation sets the memory limit.",true]]},{"t":4,"label":"point 4","rows":[["Operation","0.17 ms","a 250 × 250 matrix times itself; reads a, writes the result: 31 million operations on 1.0 MB, 31 operations per byte.",true],["Limit","220 GFLOP/s","compute-bound: the 4 CPUs' peak.",true],["Measured","179 GFLOP/s","82% of the limit. A small product: starting 4 threads and short loops cost time.",true]]},{"t":5,"label":"point 5","rows":[["Operation","1.5 ms","a 500 × 500 matrix times itself; reads a, writes the result: 250 million operations on 4.0 MB, 62 operations per byte.",true],["Limit","220 GFLOP/s","compute-bound: the 4 CPUs' peak.",true],["Measured","167 GFLOP/s","76% of the limit. A small product: starting 4 threads and short loops cost time.",true]]},{"t":6,"label":"point 6","rows":[["Operation","10 ms","a 1,000 × 1,000 matrix times itself; reads a, writes the result: 2.0 billion operations on 16 MB, 125 operations per byte.",true],["Limit","220 GFLOP/s","compute-bound: the 4 CPUs' peak.",true],["Measured","198 GFLOP/s","90% of the limit. Big enough to keep both cores busy most of the time.",true]]},{"t":7,"label":"point 7","rows":[["Operation","76 ms","a 2,000 × 2,000 matrix times itself; reads a, writes the result: 16 billion operations on 64 MB, 250 operations per byte.",true],["Limit","220 GFLOP/s","compute-bound: the 4 CPUs' peak.",true],["Measured","209 GFLOP/s","95% of the limit. This is the product of Exercise 1.",true]]},{"t":8,"label":"point 8","rows":[["Operation","582 ms","a 4,000 × 4,000 matrix times itself; reads a, writes the result: 128 billion operations on 256 MB, 500 operations per byte.",true],["Limit","220 GFLOP/s","compute-bound: the 4 CPUs' peak.",true],["Measured","220 GFLOP/s","100% of the limit. This product sets the compute limit.",true]]},{"t":9,"label":"point 9","rows":[["Operation","156 ms","a 2,000 × 2,000 matrix times itself; reads a, writes the result: 16 billion operations on 64 MB, 250 operations per byte.",true],["Limit","105 GFLOP/s","compute-bound, on one core: 105 GFLOP/s (measured with one thread, 4,000 × 4,000).",true],["Measured","103 GFLOP/s","98% of the limit. One thread runs on one core. The job's 4 CPUs are 2 cores, so one thread gets half of the job's compute.",true],["Result","","Below 5.6 operations per byte an operation waits for memory; above, for the cores. a @ a does 6,000 times more work per byte than a + b, and runs 200 times faster.",true]]}],"tmax":9},"gpu":{"title":"The GPU (float64)","sub":"fortran, the GPU of the GPU page. Hollow: data already on the GPU; filled: with the copies.","roofs":{"mem":1492.7118254145246,"peak":1529.758943881751,"pcie":16.481386423196646,"cmem":39.62366533936468,"cpeak":219.97344552182915},"points":[{"k":1,"label":"a + b, on the GPU","x":0.041666666666666664,"y":58.215689701911714,"limit":62.196326058938524,"copies":false,"kind":"gpu"},{"k":2,"label":"a + b, with copies","x":0.041666666666666664,"y":0.6871541647947106,"limit":0.6867244342998602,"copies":true,"kind":"gpu"},{"k":3,"label":"a @ b, 250, on the GPU","x":20.833333333333332,"y":397.5926250681328,"limit":1529.758943881751,"copies":false,"kind":"gpu"},{"k":4,"label":"a @ b, 250, with copies","x":20.833333333333332,"y":184.02703825529215,"limit":343.36221714993013,"copies":true,"kind":"gpu"},{"k":5,"label":"a @ b, 2,000, on the GPU","x":166.66666666666666,"y":1441.8207215721438,"limit":1529.758943881751,"copies":false,"kind":"gpu"},{"k":6,"label":"a @ b, 2,000, with copies","x":166.66666666666666,"y":1011.9630454552904,"limit":1529.758943881751,"copies":true,"kind":"gpu"},{"k":7,"label":"a @ b, 16,000, on the GPU","x":1333.3333333333333,"y":1529.758943881751,"limit":1529.758943881751,"copies":false,"kind":"gpu"},{"k":8,"label":"a @ b, 16,000, with copies","x":1333.3333333333333,"y":1430.7672993602077,"limit":1529.758943881751,"copies":true,"kind":"gpu"}],"steps":[{"t":0,"label":"the limits","rows":[["GPU memory","1,490 GB/s","a + b on 500 million numbers already in the GPU's memory.",true],["GPU compute","1,530 GFLOP/s","a 16,000 × 16,000 matrix product in float64 (in float32 this GPU is about 50 times faster).",true],["PCIe bus","16.5 GB/s","copying the data in and the result back out, when the data starts in the computer's RAM. In gray: the CPU's limits.",true]]},{"t":1,"label":"point 1","rows":[["Operation","0.17 ms","a + b on 10 million numbers, with the data already on the GPU: 10 million operations on 240 MB, 0.0417 operations per byte.",true],["Limit","62 GFLOP/s","memory-bound: 1,490 GB/s × 0.0417 operations per byte.",true],["Measured","58 GFLOP/s","94% of the limit. 55 times the CPU's a + b: the GPU's memory is much faster than the CPU's.",true]]},{"t":2,"label":"point 2","rows":[["Operation","15 ms","a + b on 10 million numbers, with the copies in and out: 10 million operations on 240 MB, 0.0417 operations per byte.",true],["Limit","0.69 GFLOP/s","bound by the PCIe bus: 16.5 GB/s × 0.0417 operations per byte.",true],["Measured","0.69 GFLOP/s","100% of the limit. Slower than the CPU's 1.1 GFLOP/s: the PCIe bus moves 16.5 GB/s, less than the CPU reads from its own memory.",true]]},{"t":3,"label":"point 3","rows":[["Operation","79 µs","a @ b, two 250 × 250 matrices, with the data already on the GPU: 31 million operations on 1.5 MB, 21 operations per byte.",true],["Limit","1,530 GFLOP/s","compute-bound: the GPU's peak in float64.",true],["Measured","398 GFLOP/s","26% of the limit. Too little work to keep thousands of GPU cores busy.",true]]},{"t":4,"label":"point 4","rows":[["Operation","0.17 ms","a @ b, two 250 × 250 matrices, with the copies in and out: 31 million operations on 1.5 MB, 21 operations per byte.",true],["Limit","343 GFLOP/s","bound by the PCIe bus: 16.5 GB/s × 21 operations per byte.",true],["Measured","184 GFLOP/s","54% of the limit. About the CPU's 179 GFLOP/s for the same size: this is where the GPU starts to pay off.",true]]},{"t":5,"label":"point 5","rows":[["Operation","11 ms","a @ b, two 2,000 × 2,000 matrices, with the data already on the GPU: 16 billion operations on 96 MB, 167 operations per byte.",true],["Limit","1,530 GFLOP/s","compute-bound: the GPU's peak in float64.",true],["Measured","1,440 GFLOP/s","94% of the limit. Enough work to keep the GPU busy.",true]]},{"t":6,"label":"point 6","rows":[["Operation","16 ms","a @ b, two 2,000 × 2,000 matrices, with the copies in and out: 16 billion operations on 96 MB, 167 operations per byte.",true],["Limit","1,530 GFLOP/s","compute-bound: the GPU's peak in float64.",true],["Measured","1,010 GFLOP/s","66% of the limit. The copies take 30% of the time.",true]]},{"t":7,"label":"point 7","rows":[["Operation","5.4 s","a @ b, two 16,000 × 16,000 matrices, with the data already on the GPU: 8.2 trillion operations on 6.1 GB, 1,333 operations per byte.",true],["Limit","1,530 GFLOP/s","compute-bound: the GPU's peak in float64.",true],["Measured","1,530 GFLOP/s","100% of the limit. This product sets the compute limit.",true]]},{"t":8,"label":"point 8","rows":[["Operation","5.7 s","a @ b, two 16,000 × 16,000 matrices, with the copies in and out: 8.2 trillion operations on 6.1 GB, 1,333 operations per byte.",true],["Limit","1,530 GFLOP/s","compute-bound: the GPU's peak in float64.",true],["Measured","1,430 GFLOP/s","94% of the limit. The copies take only 6% of the time: 6.5 times the CPU's peak.",true],["Result","","When the data starts in RAM, the PCIe line is the GPU's limit up to 93 operations per byte, and it stays below the CPU's limit up to 13: that is why a + b never pays off on the GPU, and the matrix product does from about 250 × 250 (21 operations per byte).",true]]}],"tmax":8}},"cmeta":{"host":"haskell","cpus":4,"numpy":"2.5.4","blas":[["openblas",4,"Cooperlake"]],"job":"25134"},"gmeta":{"host":"fortran","gpu":"NVIDIA RTX PRO 6000 Blackwell Server Edition","gpu_memory_gb":101.973950464,"cupy":"14.2.0","cuda_runtime":12090,"context_s":0.24874852795619518,"first_kernels_s":1.7437244080938399,"cpu":"AMD EPYC 9755 128-Core Processor","cpus_allowed":8,"numpy":"2.5.4","blas":[["openblas",8,"Cooperlake"]],"date":"2026-10-27 05:07"},"cpuPoints":[{"x":0.041666666666666664,"y":1.0664562084357478},{"x":0.125,"y":3.414489464811851},{"x":0.25,"y":9.90591633484117},{"x":31.25,"y":179.44300880402653},{"x":62.5,"y":167.3527457783037},{"x":125.0,"y":198.49858850253128},{"x":250.0,"y":209.2339574281956},{"x":500.0,"y":219.97344552182915},{"x":250.0,"y":102.6921663010411}]};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Compute or Move?: operations per second against operations per byte, one point per step (t = step).
+const CPUC = "#2a78d6", GPUC = "#1baf7a", COPY = "#eb6834";
+const cx0 = 150, cx1 = 850, cy0 = 150, cy1 = 590;
+const XL = [0.01, 100000], YL = [0.1, 10000];
+const lg = Math.log10;
+const X = v => cx0 + (lg(v) - lg(XL[0])) / (lg(XL[1]) - lg(XL[0])) * (cx1 - cx0);
+const Y = v => cy1 - (lg(v) - lg(YL[0])) / (lg(YL[1]) - lg(YL[0])) * (cy1 - cy0);
+const num = v => v >= 1 ? v.toLocaleString("en-US") : String(v);
+function sig(x, n = 2) {
+  const d = n - 1 - Math.floor(lg(Math.abs(x))), r = Math.round(x * 10 ** d) / 10 ** d;
+  return r.toLocaleString("en-US", { minimumFractionDigits: Math.max(d, 0), maximumFractionDigits: Math.max(d, 0) });
+}
+const gf = x => sig(x, x >= 100 ? 3 : 2);
+
+function axes() {
+  for (let p = lg(XL[0]); p <= lg(XL[1]) + EPS; p++) {
+    const v = 10 ** p, x = X(v);
+    line(x, cy0, x, cy1, { color: GRID });
+    text(x, cy1 + 16, num(+v.toPrecision(1)), { fs: 11.5, color: MUTED, ha: "center" });
+  }
+  for (let p = lg(YL[0]); p <= lg(YL[1]) + EPS; p++) {
+    const v = 10 ** p, y = Y(v);
+    line(cx0, y, cx1, y, { color: GRID });
+    text(cx0 - 10, y, num(+v.toPrecision(1)), { fs: 11.5, color: MUTED, ha: "right" });
+  }
+  text((cx0 + cx1) / 2, cy1 + 42, "operations per byte moved (log scale)", { fs: 12.5, color: INK_2, ha: "center" });
+  text(cx0 - 60, cy0 - 22, "GFLOP/s: billions of operations per second (log scale)", { fs: 12.5, color: INK_2 });
+}
+
+// a roof: min(bandwidth × I, peak), with labels on the slope and on the flat part
+function roof(bw, peak, color, o = {}) {
+  const ridge = peak / bw, x0 = Math.max(XL[0], YL[0] / bw);
+  const pts = [[x0, bw * x0], [ridge, peak], [XL[1], peak]].map(([a, b]) => `${X(a).toFixed(1)},${Y(b).toFixed(1)}`).join(" ");
+  out.push(`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${((o.lw || 2.2) * K).toFixed(2)}"`
+    + ` stroke-linejoin="round"${o.dash ? ` stroke-dasharray="${o.dash}"` : ""}${o.alpha != null ? ` opacity="${o.alpha}"` : ""}/>`);
+  if (o.slope) {
+    const xs = o.slopeAt || Math.max(x0 * 2, 0.02);
+    if (o.slopeRight) text(X(xs) + 10, Y(bw * xs) + 6, o.slope, { fs: 12.5, color: o.ink || INK });
+    else text(X(xs) - 6, Y(bw * xs) - 14, o.slope, { fs: 12.5, color: o.ink || INK, ha: "right" });
+  }
+  if (o.flat) text(o.flatAt ? X(o.flatAt) : cx1 - 8, Y(peak) + (o.below ? 14 : -12), o.flat, { fs: 12.5, color: o.ink || INK, ha: "right" });
+}
+
+function marker(p, current) {
+  const x = X(p.x), y = Y(p.y), r = current ? 8.5 : 6;
+  if (p.kind === "cpu") out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${CPUC}" stroke="#ffffff" stroke-width="2"/>`);
+  else if (p.copies) out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${GPUC}" stroke="#ffffff" stroke-width="2"/>`);
+  else out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="#ffffff" stroke="${GPUC}" stroke-width="2.5"/>`);
+  if (current) out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r + 4}" fill="none" stroke="${ORANGE}" stroke-width="2"/>`);
+  // number: GPU-only points above-left, everything else above-right
+  const dx = p.kind === "gpu" && !p.copies ? -12 : 12, dy = p.kind === "gpu" && p.copies ? 14 : -13;
+  text(x + dx, y + dy, `${p.k}`, { fs: 12, ha: dx < 0 ? "right" : "start", bold: current });
+}
+
+function drawView(id, t) {
+  const v = DATA.views[id], k = Math.min(Math.floor(t + EPS), v.points.length);
+  text(60, 52, v.title, { fs: 28 });
+  text(60, 90, v.sub, { fs: 15, color: INK_2 });
+  axes();
+  const R = v.roofs;
+  if (id === "cpu") {
+    roof(R.mem, R.peak, INK, { slope: `memory: ${sig(R.mem)} GB/s`, slopeAt: 0.06, flat: `4 CPUs: ${gf(R.peak)} GFLOP/s` });
+    if (k >= v.points.length) roof(R.mem, R.core, INK_2, { lw: 1.5, dash: "6 4", flat: `one core: ${gf(R.core)} GFLOP/s`, ink: INK_2 });
+  } else {
+    roof(R.cmem, R.cpeak, MUTED, { lw: 1.5, dash: "6 4", flat: `CPU: ${gf(R.cpeak)}`, flatAt: 4, ink: MUTED, slope: "CPU", slopeAt: 0.4 });
+    for (const p of DATA.cpuPoints) out.push(`<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3.5" fill="${AXIS}"/>`);
+    roof(R.mem, R.peak, GPUC, { slope: `memory: ${sig(R.mem, 3)} GB/s`, slopeAt: 0.54, slopeRight: true, flat: `GPU: ${gf(R.peak)} GFLOP/s`, ink: INK });
+    roof(R.pcie, R.peak, COPY, { slope: `PCIe: ${sig(R.pcie, 3)} GB/s`, slopeAt: 3, ink: INK });
+  }
+  // the current point's limit: a dotted line from the point up to the roof
+  if (k >= 1) {
+    const p = v.points[k - 1];
+    if (p.limit > p.y * 1.03) line(X(p.x), Y(p.y) - 9, X(p.x), Y(p.limit), { color: INK_2, lw: 1.2, dashed: true });
+  }
+  v.points.slice(0, k).forEach((p, i) => marker(p, i === k - 1));
+  // the list of operations shown so far
+  const lx = 885;
+  text(lx, cy0 - 22, "Operations", { fs: 12.5, color: MUTED });
+  text(1240, cy0 - 22, "GFLOP/s", { fs: 12.5, color: MUTED, ha: "right" });
+  v.points.slice(0, k).forEach((p, i) => {
+    const y = cy0 + 6 + i * 30, cur = i === k - 1;
+    const col = p.kind === "cpu" ? CPUC : GPUC;
+    if (p.kind === "gpu" && !p.copies) out.push(`<circle cx="${lx + 7}" cy="${y}" r="5.5" fill="#ffffff" stroke="${col}" stroke-width="2.2"/>`);
+    else out.push(`<circle cx="${lx + 7}" cy="${y}" r="6" fill="${col}"/>`);
+    text(lx + 22, y, `${p.k}`, { fs: 12.5, bold: cur });
+    text(lx + 42, y, p.label, { fs: 12.5, bold: cur });
+    text(1240, y, gf(p.y), { fs: 12.5, ha: "right", bold: cur });
+  });
+  rect(cx0, cy0, cx1 - cx0, cy1 - cy0 + 24, { cls: "seek" });
+}
+
+function seekPoint(id) {
+  return x => {
+    const v = DATA.views[id];
+    let best = 0, dist = Infinity;
+    v.points.forEach((p, i) => { const d = Math.abs(X(p.x) - x); if (d < dist - 0.5) { dist = d; best = i + 1; } });
+    return best;
+  };
+}
+
+const SPEEDS = [0.25, 0.4, 0.6, 0.8, 1, 1.5];  // operations per second
+const VIEWS = [
+  { id: "cpu", label: "CPU", unit: "operations", snap: 0.001, speeds: SPEEDS, speed: 2, video: "",
+    get tmax() { return DATA.views.cpu.tmax; }, draw: t => drawView("cpu", t), seek: seekPoint("cpu") },
+  { id: "gpu", label: "GPU", unit: "operations", snap: 0.001, speeds: SPEEDS, speed: 2, video: "",
+    get tmax() { return DATA.views.gpu.tmax; }, draw: t => drawView("gpu", t), seek: seekPoint("gpu") },
+];
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
