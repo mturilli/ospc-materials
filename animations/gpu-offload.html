@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>When Does the GPU Pay Off?</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>When Does the GPU Pay Off?</h1>
+      <p>Copy the data to the GPU, compute, copy the result back, and compare with the same work on the CPU. Measured on our cluster.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>3</kbd> to change view. Click the chart to pick a size. Press <kbd>D</kbd> to switch between float32 and float64.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements</h2>
+    <p><b>Where.</b> One node of our cluster, fortran: an NVIDIA RTX PRO 6000 Blackwell GPU, the same GPU as julia, and two AMD EPYC 9755 processors, the same as haskell. Student jobs cannot run on fortran, but it was free when julia's GPU was busy. The GPU times come from a GPU job, the CPU times from a 4-CPU job on the same node, like the jobs of Exercise 2. Every time is the best of several runs of a program that had already run once.</p>
+    <p><b>What is timed.</b> The arrays start as ordinary NumPy arrays in the computer's RAM. Copy in is <code>cp.asarray(a)</code> and <code>cp.asarray(b)</code>, compute is <code>a @ b</code> or <code>a + b</code> on the GPU, and copy out is <code>cp.asnumpy(c)</code>. Each piece is timed on its own, and the GPU time is their sum. Timed in one go, the whole round trip comes within 14% of that sum, and within 5% for 21 of the 26 sizes.</p>
+    <p><b>a + b repeated.</b> The third view is not a separate measurement: it adds up the measured pieces for 100,000,000 numbers, as if the program kept its data on the GPU and ran the operation k times.</p>
+    <p><b>What we left out.</b> The first CuPy call in a program also starts the GPU and prepares its code (2.0 s here), once per program, so time a GPU program only after a first run. Copies from page-locked memory are faster than from ordinary NumPy arrays, and a program can copy and compute at the same time; here the steps run one after the other.</p>
+    <p><b>More CPUs.</b> A 64-CPU job on the same node multiplies two 16,000 × 16,000 matrices in float32 in 1.2 s instead of 15.9 s, still slower than the GPU's 301 ms. In float64 it wins: 3.5 s against the GPU's 5.7 s. For small matrices (250 × 250), starting 64 threads costs more than the work: 106 µs instead of 83 µs. We come back to this in Session 22. Adding two arrays uses one core whatever the job asks for.</p>
+    <p>Data files: gpu_sweep-fortran-25130.json, cpu_sweep-fortran-c4-25131.json and cpu_sweep-fortran-c64-25132.json.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"gpu-offload","dev":false,"views":{"matmul":{"steps":[{"t":0,"label":"250","rows":[["GPU","79 µs","copy in 36 µs, compute 21 µs, copy out 22 µs: 74% of the GPU's time is copying.",true],["CPU","83 µs","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":1,"label":"500","rows":[["GPU","0.19 ms","copy in 90 µs, compute 40 µs, copy out 57 µs: 79% of the GPU's time is copying.",true],["CPU","0.56 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 3.0 times faster.",true]]},{"t":2,"label":"1,000","rows":[["GPU","0.51 ms","copy in 0.28 ms, compute 63 µs, copy out 0.16 ms: 88% of the GPU's time is copying.",true],["CPU","4.2 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 8.3 times faster.",true]]},{"t":3,"label":"2,000","rows":[["GPU","2.8 ms","copy in 1.9 ms, compute 0.28 ms, copy out 0.60 ms: 90% of the GPU's time is copying.",true],["CPU","32 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 11.6 times faster.",true]]},{"t":4,"label":"4,000","rows":[["GPU","16 ms","copy in 6.8 ms, compute 1.9 ms, copy out 6.9 ms: 88% of the GPU's time is copying.",true],["CPU","253 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 16.3 times faster.",true]]},{"t":5,"label":"8,000","rows":[["GPU","60 ms","copy in 26 ms, compute 14 ms, copy out 21 ms: 77% of the GPU's time is copying.",true],["CPU","2.0 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 33.2 times faster.",true]]},{"t":6,"label":"16,000","rows":[["GPU","301 ms","copy in 105 ms, compute 112 ms, copy out 84 ms: 63% of the GPU's time is copying.",true],["CPU","15.9 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 52.8 times faster.",true]]}]},"add":{"steps":[{"t":0,"label":"10⁴","rows":[["GPU","46 µs","copy in 23 µs, compute 11 µs, copy out 13 µs: 77% of the GPU's time is copying.",true],["CPU","1.3 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 35.2 times faster.",true]]},{"t":1,"label":"10⁵","rows":[["GPU","88 µs","copy in 48 µs, compute 11 µs, copy out 29 µs: 88% of the GPU's time is copying.",true],["CPU","11 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 8.3 times faster.",true]]},{"t":2,"label":"10⁶","rows":[["GPU","0.48 ms","copy in 0.30 ms, compute 15 µs, copy out 0.17 ms: 97% of the GPU's time is copying.",true],["CPU","0.12 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 4.0 times faster.",true]]},{"t":3,"label":"10⁷","rows":[["GPU","7.3 ms","copy in 4.0 ms, compute 55 µs, copy out 3.3 ms: 99% of the GPU's time is copying.",true],["CPU","3.1 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.3 times faster.",true]]},{"t":4,"label":"10⁸","rows":[["GPU","74 ms","copy in 40 ms, compute 0.81 ms, copy out 33 ms: 99% of the GPU's time is copying.",true],["CPU","34 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":5,"label":"5×10⁸","rows":[["GPU","373 ms","copy in 206 ms, compute 4.0 ms, copy out 163 ms: 99% of the GPU's time is copying.",true],["CPU","170 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]}]},"keep":{"steps":[{"t":0,"label":"k = 1","rows":[["GPU","74 ms","copy in 40 ms, then 1 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","34 ms","1 × 34 ms (one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":1,"label":"k = 2","rows":[["GPU","75 ms","copy in 40 ms, then 2 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","68 ms","2 × 34 ms (one core).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":2,"label":"k = 3","rows":[["GPU","75 ms","copy in 40 ms, then 3 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","102 ms","3 × 34 ms (one core).",true],["Result","","The GPU is 1.4 times faster.",true]]},{"t":3,"label":"k = 5","rows":[["GPU","77 ms","copy in 40 ms, then 5 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","170 ms","5 × 34 ms (one core).",true],["Result","","The GPU is 2.2 times faster.",true]]},{"t":4,"label":"k = 10","rows":[["GPU","81 ms","copy in 40 ms, then 10 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","340 ms","10 × 34 ms (one core).",true],["Result","","The GPU is 4.2 times faster.",true]]},{"t":5,"label":"k = 100","rows":[["GPU","154 ms","copy in 40 ms, then 100 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","3.4 s","100 × 34 ms (one core).",true],["Result","","The GPU is 22.0 times faster.",true]]}]}},"variants":{"float32":{"matmul":{"steps":[{"t":0,"label":"250","rows":[["GPU","79 µs","copy in 36 µs, compute 21 µs, copy out 22 µs: 74% of the GPU's time is copying.",true],["CPU","83 µs","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":1,"label":"500","rows":[["GPU","0.19 ms","copy in 90 µs, compute 40 µs, copy out 57 µs: 79% of the GPU's time is copying.",true],["CPU","0.56 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 3.0 times faster.",true]]},{"t":2,"label":"1,000","rows":[["GPU","0.51 ms","copy in 0.28 ms, compute 63 µs, copy out 0.16 ms: 88% of the GPU's time is copying.",true],["CPU","4.2 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 8.3 times faster.",true]]},{"t":3,"label":"2,000","rows":[["GPU","2.8 ms","copy in 1.9 ms, compute 0.28 ms, copy out 0.60 ms: 90% of the GPU's time is copying.",true],["CPU","32 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 11.6 times faster.",true]]},{"t":4,"label":"4,000","rows":[["GPU","16 ms","copy in 6.8 ms, compute 1.9 ms, copy out 6.9 ms: 88% of the GPU's time is copying.",true],["CPU","253 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 16.3 times faster.",true]]},{"t":5,"label":"8,000","rows":[["GPU","60 ms","copy in 26 ms, compute 14 ms, copy out 21 ms: 77% of the GPU's time is copying.",true],["CPU","2.0 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 33.2 times faster.",true]]},{"t":6,"label":"16,000","rows":[["GPU","301 ms","copy in 105 ms, compute 112 ms, copy out 84 ms: 63% of the GPU's time is copying.",true],["CPU","15.9 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 52.8 times faster.",true]]}]},"add":{"steps":[{"t":0,"label":"10⁴","rows":[["GPU","46 µs","copy in 23 µs, compute 11 µs, copy out 13 µs: 77% of the GPU's time is copying.",true],["CPU","1.3 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 35.2 times faster.",true]]},{"t":1,"label":"10⁵","rows":[["GPU","88 µs","copy in 48 µs, compute 11 µs, copy out 29 µs: 88% of the GPU's time is copying.",true],["CPU","11 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 8.3 times faster.",true]]},{"t":2,"label":"10⁶","rows":[["GPU","0.48 ms","copy in 0.30 ms, compute 15 µs, copy out 0.17 ms: 97% of the GPU's time is copying.",true],["CPU","0.12 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 4.0 times faster.",true]]},{"t":3,"label":"10⁷","rows":[["GPU","7.3 ms","copy in 4.0 ms, compute 55 µs, copy out 3.3 ms: 99% of the GPU's time is copying.",true],["CPU","3.1 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.3 times faster.",true]]},{"t":4,"label":"10⁸","rows":[["GPU","74 ms","copy in 40 ms, compute 0.81 ms, copy out 33 ms: 99% of the GPU's time is copying.",true],["CPU","34 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":5,"label":"5×10⁸","rows":[["GPU","373 ms","copy in 206 ms, compute 4.0 ms, copy out 163 ms: 99% of the GPU's time is copying.",true],["CPU","170 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]}]},"keep":{"steps":[{"t":0,"label":"k = 1","rows":[["GPU","74 ms","copy in 40 ms, then 1 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","34 ms","1 × 34 ms (one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":1,"label":"k = 2","rows":[["GPU","75 ms","copy in 40 ms, then 2 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","68 ms","2 × 34 ms (one core).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":2,"label":"k = 3","rows":[["GPU","75 ms","copy in 40 ms, then 3 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","102 ms","3 × 34 ms (one core).",true],["Result","","The GPU is 1.4 times faster.",true]]},{"t":3,"label":"k = 5","rows":[["GPU","77 ms","copy in 40 ms, then 5 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","170 ms","5 × 34 ms (one core).",true],["Result","","The GPU is 2.2 times faster.",true]]},{"t":4,"label":"k = 10","rows":[["GPU","81 ms","copy in 40 ms, then 10 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","340 ms","10 × 34 ms (one core).",true],["Result","","The GPU is 4.2 times faster.",true]]},{"t":5,"label":"k = 100","rows":[["GPU","154 ms","copy in 40 ms, then 100 × 0.81 ms of compute, copy out 33 ms.",true],["CPU","3.4 s","100 × 34 ms (one core).",true],["Result","","The GPU is 22.0 times faster.",true]]}]}},"float64":{"matmul":{"steps":[{"t":0,"label":"250","rows":[["GPU","0.17 ms","copy in 56 µs, compute 79 µs, copy out 36 µs: 54% of the GPU's time is copying.",true],["CPU","0.17 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":1,"label":"500","rows":[["GPU","0.55 ms","copy in 0.18 ms, compute 0.28 ms, copy out 97 µs: 50% of the GPU's time is copying.",true],["CPU","1.3 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 2.4 times faster.",true]]},{"t":2,"label":"1,000","rows":[["GPU","2.6 ms","copy in 0.76 ms, compute 1.5 ms, copy out 0.31 ms: 41% of the GPU's time is copying.",true],["CPU","10 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 3.9 times faster.",true]]},{"t":3,"label":"2,000","rows":[["GPU","16 ms","copy in 3.6 ms, compute 11 ms, copy out 1.1 ms: 30% of the GPU's time is copying.",true],["CPU","76 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 4.8 times faster.",true]]},{"t":4,"label":"4,000","rows":[["GPU","108 ms","copy in 13 ms, compute 85 ms, copy out 9.9 ms: 21% of the GPU's time is copying.",true],["CPU","580 ms","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 5.4 times faster.",true]]},{"t":5,"label":"8,000","rows":[["GPU","768 ms","copy in 55 ms, compute 672 ms, copy out 41 ms: 13% of the GPU's time is copying.",true],["CPU","4.5 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 5.9 times faster.",true]]},{"t":6,"label":"16,000","rows":[["GPU","5.7 s","copy in 208 ms, compute 5.4 s, copy out 163 ms: 6% of the GPU's time is copying.",true],["CPU","36.6 s","4-CPU job, NumPy (OpenBLAS, 4 threads).",true],["Result","","The GPU is 6.4 times faster.",true]]}]},"add":{"steps":[{"t":0,"label":"10⁴","rows":[["GPU","50 µs","copy in 25 µs, compute 11 µs, copy out 15 µs: 79% of the GPU's time is copying.",true],["CPU","1.8 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 28.3 times faster.",true]]},{"t":1,"label":"10⁵","rows":[["GPU","0.13 ms","copy in 73 µs, compute 11 µs, copy out 48 µs: 92% of the GPU's time is copying.",true],["CPU","23 µs","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 5.7 times faster.",true]]},{"t":2,"label":"10⁶","rows":[["GPU","1.1 ms","copy in 0.79 ms, compute 15 µs, copy out 0.31 ms: 99% of the GPU's time is copying.",true],["CPU","0.21 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 5.4 times faster.",true]]},{"t":3,"label":"10⁷","rows":[["GPU","15 ms","copy in 8.0 ms, compute 0.17 ms, copy out 6.4 ms: 99% of the GPU's time is copying.",true],["CPU","6.9 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.1 times faster.",true]]},{"t":4,"label":"10⁸","rows":[["GPU","147 ms","copy in 81 ms, compute 1.6 ms, copy out 64 ms: 99% of the GPU's time is copying.",true],["CPU","68 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":5,"label":"5×10⁸","rows":[["GPU","736 ms","copy in 406 ms, compute 8.0 ms, copy out 322 ms: 99% of the GPU's time is copying.",true],["CPU","342 ms","4-CPU job, NumPy (one core: NumPy adds on one core).",true],["Result","","The CPU is 2.2 times faster.",true]]}]},"keep":{"steps":[{"t":0,"label":"k = 1","rows":[["GPU","147 ms","copy in 81 ms, then 1 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","68 ms","1 × 68 ms (one core).",true],["Result","","The CPU is 2.2 times faster.",true]]},{"t":1,"label":"k = 2","rows":[["GPU","149 ms","copy in 81 ms, then 2 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","136 ms","2 × 68 ms (one core).",true],["Result","","The GPU and the CPU take about the same time.",true]]},{"t":2,"label":"k = 3","rows":[["GPU","150 ms","copy in 81 ms, then 3 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","204 ms","3 × 68 ms (one core).",true],["Result","","The GPU is 1.4 times faster.",true]]},{"t":3,"label":"k = 5","rows":[["GPU","153 ms","copy in 81 ms, then 5 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","340 ms","5 × 68 ms (one core).",true],["Result","","The GPU is 2.2 times faster.",true]]},{"t":4,"label":"k = 10","rows":[["GPU","162 ms","copy in 81 ms, then 10 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","681 ms","10 × 68 ms (one core).",true],["Result","","The GPU is 4.2 times faster.",true]]},{"t":5,"label":"k = 100","rows":[["GPU","307 ms","copy in 81 ms, then 100 × 1.6 ms of compute, copy out 64 ms.",true],["CPU","6.8 s","100 × 68 ms (one core).",true],["Result","","The GPU is 22.2 times faster.",true]]}]}}},"meas":{"float32":{"matmul":[{"n":250,"ops":31250000,"bin":500000,"bout":250000,"h2d":0.03629003185778856,"gpu":0.020558014512062073,"d2h":0.02230098471045494,"trip":0.07914903108030558,"whole":0.07575401104986668,"cpu":0.08292298298329115},{"n":500,"ops":250000000,"bin":2000000,"bout":1000000,"h2d":0.08999300189316273,"gpu":0.03983394708484411,"d2h":0.05734805017709732,"trip":0.18717499915510416,"whole":0.18595403525978327,"cpu":0.5589539650827646},{"n":1000,"ops":2000000000,"bin":8000000,"bout":4000000,"h2d":0.2846989082172513,"gpu":0.06252492312341928,"d2h":0.15878700651228428,"trip":0.5060108378529549,"whole":0.5243469495326281,"cpu":4.175617941655219},{"n":2000,"ops":16000000000,"bin":32000000,"bout":16000000,"h2d":1.8881210125982761,"gpu":0.28444896452128887,"d2h":0.6032550008967519,"trip":2.775824978016317,"whole":2.8489649994298816,"cpu":32.129133003763855},{"n":4000,"ops":128000000000,"bin":128000000,"bout":64000000,"h2d":6.784825935028493,"gpu":1.878047944046557,"d2h":6.900324020534754,"trip":15.563197899609804,"whole":13.78473499789834,"cpu":252.94503406621516},{"n":8000,"ops":1024000000000,"bin":512000000,"bout":256000000,"h2d":25.53743205498904,"gpu":13.904848950915039,"d2h":20.662716939114034,"trip":60.10499794501811,"whole":60.53715804591775,"cpu":1993.0833979742602},{"n":16000,"ops":8192000000000,"bin":2048000000,"bout":1024000000,"h2d":105.48899101559073,"gpu":112.07105999346823,"d2h":83.5751440608874,"trip":301.13519506994635,"whole":294.5300838910043,"cpu":15912.09724592045}],"add":[{"n":10000,"ops":10000,"bin":80000,"bout":40000,"h2d":0.022621010430157185,"gpu":0.010685063898563385,"d2h":0.012798001989722252,"trip":0.04610407631844282,"whole":0.040705082938075066,"cpu":0.001310952939093113},{"n":100000,"ops":100000,"bin":800000,"bout":400000,"h2d":0.047564972192049026,"gpu":0.010994961485266685,"d2h":0.029450049623847008,"trip":0.08800998330116272,"whole":0.07947906851768494,"cpu":0.010554096661508083},{"n":1000000,"ops":1000000,"bin":8000000,"bout":4000000,"h2d":0.3008519997820258,"gpu":0.015291036106646061,"d2h":0.16564701218158007,"trip":0.48179004807025194,"whole":0.4890579730272293,"cpu":0.1192829804494977},{"n":10000000,"ops":10000000,"bin":80000000,"bout":40000000,"h2d":3.984286915510893,"gpu":0.055394950322806835,"d2h":3.262700978666544,"trip":7.302382844500244,"whole":7.428995915688574,"cpu":3.1241609249264},{"n":100000000,"ops":100000000,"bin":800000000,"bout":400000000,"h2d":39.98743603006005,"gpu":0.8137120166793466,"d2h":33.01257104612887,"trip":73.81371909286827,"whole":73.59048398211598,"cpu":34.01968698017299},{"n":500000000,"ops":500000000,"bin":4000000000,"bout":2000000000,"h2d":205.71976399514824,"gpu":4.030089010484517,"d2h":163.05694007314742,"trip":372.8067930787802,"whole":372.23047495353967,"cpu":170.36282899789512}]},"float64":{"matmul":[{"n":250,"ops":31250000,"bin":1000000,"bout":500000,"h2d":0.055514974519610405,"gpu":0.0785980373620987,"d2h":0.035698991268873215,"trip":0.1698120031505823,"whole":0.1647650497034192,"cpu":0.17357710748910904},{"n":500,"ops":250000000,"bin":4000000,"bout":2000000,"h2d":0.17994607333093882,"gpu":0.2760369097813964,"d2h":0.0973530113697052,"trip":0.5533359944820404,"whole":0.5255579017102718,"cpu":1.3233900535851717},{"n":1000,"ops":2000000000,"bin":16000000,"bout":8000000,"h2d":0.7551229791715741,"gpu":1.5415470115840435,"d2h":0.30908198095858097,"trip":2.6057519717141986,"whole":2.7413079515099525,"cpu":10.110380942933261},{"n":2000,"ops":16000000000,"bin":64000000,"bout":32000000,"h2d":3.5852909786626697,"gpu":11.097080074250698,"d2h":1.1284829815849662,"trip":15.810854034498334,"whole":15.633031958714128,"cpu":75.96807403024286},{"n":4000,"ops":128000000000,"bin":256000000,"bout":128000000,"h2d":12.792418012395501,"gpu":84.80653690639883,"d2h":9.939106996171176,"trip":107.53806191496551,"whole":109.1144869569689,"cpu":580.0631479360163},{"n":8000,"ops":1024000000000,"bin":1024000000,"bout":512000000,"h2d":55.18730508629233,"gpu":672.3159539978951,"d2h":40.86645704228431,"trip":768.3697161264718,"whole":766.0141970263794,"cpu":4546.998173929751},{"n":16000,"ops":8192000000000,"bin":4096000000,"bout":2048000000,"h2d":207.79727399349213,"gpu":5355.092076933943,"d2h":162.70977596286684,"trip":5725.599126890302,"whole":5725.64118495211,"cpu":36550.23294698913}],"add":[{"n":10000,"ops":10000,"bin":160000,"bout":80000,"h2d":0.02479401882737875,"gpu":0.010665040463209152,"d2h":0.014739925973117352,"trip":0.050198985263705254,"whole":0.04816602449864149,"cpu":0.0017719576135277748},{"n":100000,"ops":100000,"bin":1600000,"bout":800000,"h2d":0.073309987783432,"gpu":0.011024996638298035,"d2h":0.048335990868508816,"trip":0.13267097529023886,"whole":0.12162700295448303,"cpu":0.023311004042625427},{"n":1000000,"ops":1000000,"bin":16000000,"bout":8000000,"h2d":0.7924929959699512,"gpu":0.015279976651072502,"d2h":0.31005393248051405,"trip":1.1178269051015377,"whole":1.1432529427111149,"cpu":0.20614196546375751},{"n":10000000,"ops":10000000,"bin":160000000,"bout":80000000,"h2d":7.965199067257345,"gpu":0.1717749983072281,"d2h":6.415801006369293,"trip":14.552775071933866,"whole":14.585650060325861,"cpu":6.855392013676465},{"n":100000000,"ops":100000000,"bin":1600000000,"bout":800000000,"h2d":81.42363198567182,"gpu":1.6151180025190115,"d2h":63.96599696017802,"trip":147.00474694836885,"whole":147.42057502735406,"cpu":68.08443600311875},{"n":500000000,"ops":500000000,"bin":8000000000,"bout":4000000000,"h2d":406.1489749001339,"gpu":8.039060048758984,"d2h":321.9451120821759,"trip":736.1331470310688,"whole":736.5399430273101,"cpu":341.56651597004384}]}},"keep":{"float32":[{"k":1,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":73.81371909286827,"cpu1":34.01968698017299,"cpu":34.01968698017299},{"k":2,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":74.62743110954762,"cpu1":34.01968698017299,"cpu":68.03937396034598},{"k":3,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":75.44114312622696,"cpu1":34.01968698017299,"cpu":102.05906094051898},{"k":5,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":77.06856715958565,"cpu1":34.01968698017299,"cpu":170.09843490086496},{"k":10,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":81.13712724298239,"cpu1":34.01968698017299,"cpu":340.1968698017299},{"k":100,"h2d":39.98743603006005,"gpu1":0.8137120166793466,"d2h":33.01257104612887,"trip":154.37120874412358,"cpu1":34.01968698017299,"cpu":3401.968698017299}],"float64":[{"k":1,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":147.00474694836885,"cpu1":68.08443600311875,"cpu":68.08443600311875},{"k":2,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":148.61986495088786,"cpu1":68.08443600311875,"cpu":136.1688720062375},{"k":3,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":150.23498295340687,"cpu1":68.08443600311875,"cpu":204.25330800935626},{"k":5,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":153.4652189584449,"cpu1":68.08443600311875,"cpu":340.42218001559377},{"k":10,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":161.54080897103995,"cpu1":68.08443600311875,"cpu":680.8443600311875},{"k":100,"h2d":81.42363198567182,"gpu1":1.6151180025190115,"d2h":63.96599696017802,"trip":306.901429197751,"cpu1":68.08443600311875,"cpu":6808.443600311875}]},"keepN":100000000,"labels":{"float32":{"matmul":["250","500","1,000","2,000","4,000","8,000","16,000"],"add":["10⁴","10⁵","10⁶","10⁷","10⁸","5×10⁸"]},"float64":{"matmul":["250","500","1,000","2,000","4,000","8,000","16,000"],"add":["10⁴","10⁵","10⁶","10⁷","10⁸","5×10⁸"]}},"texts":{"float32":{"matmul":{"title":["Matrix product, 250 × 250 (float32)","Matrix product, 500 × 500 (float32)","Matrix product, 1,000 × 1,000 (float32)","Matrix product, 2,000 × 2,000 (float32)","Matrix product, 4,000 × 4,000 (float32)","Matrix product, 8,000 × 8,000 (float32)","Matrix product, 16,000 × 16,000 (float32)"],"sub":["Copy in two matrices (0.50 MB), multiply (31 million operations), copy out the result (0.25 MB).","Copy in two matrices (2.0 MB), multiply (250 million operations), copy out the result (1.0 MB).","Copy in two matrices (8.0 MB), multiply (2.0 billion operations), copy out the result (4.0 MB).","Copy in two matrices (32 MB), multiply (16 billion operations), copy out the result (16 MB).","Copy in two matrices (128 MB), multiply (128 billion operations), copy out the result (64 MB).","Copy in two matrices (512 MB), multiply (1.0 trillion operations), copy out the result (256 MB).","Copy in two matrices (2.0 GB), multiply (8.2 trillion operations), copy out the result (1.0 GB)."]},"add":{"title":["a + b, 10,000 numbers each (float32)","a + b, 100,000 numbers each (float32)","a + b, 1,000,000 numbers each (float32)","a + b, 10,000,000 numbers each (float32)","a + b, 100,000,000 numbers each (float32)","a + b, 500,000,000 numbers each (float32)"],"sub":["Copy in a and b (0.080 MB), add (10 thousand operations), copy out the sum (0.040 MB).","Copy in a and b (0.80 MB), add (100 thousand operations), copy out the sum (0.40 MB).","Copy in a and b (8.0 MB), add (1.0 million operations), copy out the sum (4.0 MB).","Copy in a and b (80 MB), add (10 million operations), copy out the sum (40 MB).","Copy in a and b (800 MB), add (100 million operations), copy out the sum (400 MB).","Copy in a and b (4.0 GB), add (500 million operations), copy out the sum (2.0 GB)."]},"keep":{"title":["a + b repeated 1 time, 100,000,000 numbers (float32)","a + b repeated 2 times, 100,000,000 numbers (float32)","a + b repeated 3 times, 100,000,000 numbers (float32)","a + b repeated 5 times, 100,000,000 numbers (float32)","a + b repeated 10 times, 100,000,000 numbers (float32)","a + b repeated 100 times, 100,000,000 numbers (float32)"],"sub":["The data stays on the GPU between operations: copy in once, compute 1 time, copy out once.","The data stays on the GPU between operations: copy in once, compute 2 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 3 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 5 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 10 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 100 times, copy out once."]}},"float64":{"matmul":{"title":["Matrix product, 250 × 250 (float64)","Matrix product, 500 × 500 (float64)","Matrix product, 1,000 × 1,000 (float64)","Matrix product, 2,000 × 2,000 (float64)","Matrix product, 4,000 × 4,000 (float64)","Matrix product, 8,000 × 8,000 (float64)","Matrix product, 16,000 × 16,000 (float64)"],"sub":["Copy in two matrices (1.0 MB), multiply (31 million operations), copy out the result (0.50 MB).","Copy in two matrices (4.0 MB), multiply (250 million operations), copy out the result (2.0 MB).","Copy in two matrices (16 MB), multiply (2.0 billion operations), copy out the result (8.0 MB).","Copy in two matrices (64 MB), multiply (16 billion operations), copy out the result (32 MB).","Copy in two matrices (256 MB), multiply (128 billion operations), copy out the result (128 MB).","Copy in two matrices (1.0 GB), multiply (1.0 trillion operations), copy out the result (512 MB).","Copy in two matrices (4.1 GB), multiply (8.2 trillion operations), copy out the result (2.0 GB)."]},"add":{"title":["a + b, 10,000 numbers each (float64)","a + b, 100,000 numbers each (float64)","a + b, 1,000,000 numbers each (float64)","a + b, 10,000,000 numbers each (float64)","a + b, 100,000,000 numbers each (float64)","a + b, 500,000,000 numbers each (float64)"],"sub":["Copy in a and b (0.16 MB), add (10 thousand operations), copy out the sum (0.080 MB).","Copy in a and b (1.6 MB), add (100 thousand operations), copy out the sum (0.80 MB).","Copy in a and b (16 MB), add (1.0 million operations), copy out the sum (8.0 MB).","Copy in a and b (160 MB), add (10 million operations), copy out the sum (80 MB).","Copy in a and b (1.6 GB), add (100 million operations), copy out the sum (800 MB).","Copy in a and b (8.0 GB), add (500 million operations), copy out the sum (4.0 GB)."]},"keep":{"title":["a + b repeated 1 time, 100,000,000 numbers (float64)","a + b repeated 2 times, 100,000,000 numbers (float64)","a + b repeated 3 times, 100,000,000 numbers (float64)","a + b repeated 5 times, 100,000,000 numbers (float64)","a + b repeated 10 times, 100,000,000 numbers (float64)","a + b repeated 100 times, 100,000,000 numbers (float64)"],"sub":["The data stays on the GPU between operations: copy in once, compute 1 time, copy out once.","The data stays on the GPU between operations: copy in once, compute 2 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 3 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 5 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 10 times, copy out once.","The data stays on the GPU between operations: copy in once, compute 100 times, copy out once."]}}},"cross":{"float32":{"matmul":250,"add":null,"keep":2.1992329017932057},"float64":{"matmul":250,"add":null,"keep":2.1881129303218447}},"gmeta":{"host":"fortran","gpu":"NVIDIA RTX PRO 6000 Blackwell Server Edition","gpu_memory_gb":101.973950464,"cupy":"14.2.0","cuda_runtime":12090,"context_s":0.24874852795619518,"first_kernels_s":1.7437244080938399,"cpu":"AMD EPYC 9755 128-Core Processor","cpus_allowed":8,"numpy":"2.5.4","blas":[["openblas",8,"Cooperlake"]],"date":"2026-10-27 05:07"},"cmeta":{"host":"fortran","cpu":"AMD EPYC 9755 128-Core Processor","cpus_allowed":4,"numpy":"2.5.4","blas":[["openblas",4,"Cooperlake"]],"date":"2026-10-27 05:07"},"files":["gpu_sweep-fortran-25130.json","cpu_sweep-fortran-c4-25131.json"],"fmt":{"float32":{"matmul":{"cross":"250","note":"About the same at n = 250, GPU faster above"},"add":{"cross":null,"note":"GPU never faster in this range"},"keep":{"cross":"2.2","note":"GPU faster from k ≈ 2.2"}},"float64":{"matmul":{"cross":"250","note":"About the same at n = 250, GPU faster above"},"add":{"cross":null,"note":"GPU never faster in this range"},"keep":{"cross":"2.2","note":"GPU faster from k ≈ 2.2"}}},"agree":{"worst":14,"within5":21,"sizes":26},"more":{"file":"cpu_sweep-fortran-c64-25132.json","n":16000,"c4":15912.09724592045,"c64":1221.868251916021,"gpu32":301.13519506994635,"n_small":250,"c4_small":0.08292298298329115,"c64_small":0.10592408943921328,"c64_f64":3465.3397790389135,"gpu64":5725.599126890302}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// When does the GPU pay off? One size at a time: the GPU path and the CPU drawn to scale (top), and every
+// size on log scales (bottom). DATA comes from make_gpu_page.py; nothing here computes a measurement.
+const DTYPES = ["float32", "float64"];
+let DTYPE = "float32";
+const COPY = "#eb6834", GPUC = "#1baf7a", CPUC = "#2a78d6";                // lines (the decks' edge colors)
+const FILL = { copy: "#fbd9c9", gpu: "#c9eedd", cpu: "#cde2fb" };            // bars (the decks' token fills)
+const bx0 = 250, bx1 = 1150, yGpu = 126, yCpu = 192, barH = 40;
+const cx0 = 250, cx1 = 1030, cy0 = 360, cy1 = 650;
+const GROW = 0.7;  // share of a step spent growing the bars while playing
+
+function sig(x, n = 2) {
+  if (x === 0) return "0";
+  const d = Math.max(0, n - 1 - Math.floor(Math.log10(Math.abs(x))));
+  return x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtMs(x) {
+  if (x < 0.1) return `${sig(x * 1000)} µs`;
+  if (x < 1000) return `${sig(x, x < 100 ? 2 : 3)} ms`;
+  return `${sig(x / 1000, x < 10000 ? 2 : 3)} s`;
+}
+// axis ticks are round values: no trailing zeros (10 s, 1 s, 100 µs)
+function tickMs(x) {
+  const [v, u] = x < 1 ? [x * 1000, "µs"] : x < 1000 ? [x, "ms"] : [x / 1000, "s"];
+  return `${+v.toPrecision(3)} ${u}`;
+}
+const textW = (s, fs) => s.length * fs * K * 0.55;
+const sum = segs => segs.reduce((a, s) => a + s[1], 0);
+
+function rowsOf(op) { return op === "keep" ? DATA.keep[DTYPE] : DATA.meas[DTYPE][op]; }
+function indexOf(t, n) { return Math.min(Math.floor(t + EPS), n - 1); }
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);  // a step reached by stepping shows the finished bars
+}
+
+// one bar: runs of the same kind are merged; a 2 px gap separates kinds
+function drawBar(y, name, sub, segs, scale, tau) {
+  text(bx0 - 20, y + barH / 2 - (sub ? 9 : 0), name, { fs: 17, ha: "right" });
+  if (sub) text(bx0 - 20, y + barH / 2 + 13, sub, { fs: 12, color: MUTED, ha: "right" });
+  rect(bx0, y, bx1 - bx0, barH, { stroke: GRID, lw: 0.6 });
+  const runs = [];
+  for (const [kind, d] of segs) {
+    const last = runs[runs.length - 1];
+    if (last && last.kind === kind) { last.d += d; last.n += 1; } else runs.push({ kind, d, n: 1, each: d });
+  }
+  let a = 0;
+  for (const r of runs) {
+    const b = a + r.d, e = Math.min(b, tau);
+    if (e > a) {
+      const x = bx0 + a * scale, w = (e - a) * scale;
+      rect(x + (a > 0 ? 1 : 0), y, Math.max(w - (a > 0 ? 1 : 0) - (b < sum(segs) ? 1 : 0), 0.8), barH, { fill: FILL[r.kind] });
+      if (r.n > 1 && r.each * scale >= 6)  // repeated operations: a hairline between them
+        for (let i = 1; i < r.n; i++) { const xi = bx0 + (a + i * r.each) * scale; if (xi < x + w) line(xi, y + 4, xi, y + barH - 4, { color: "#ffffff", lw: 0.8 }); }
+      const label = { copy: a === 0 ? "copy in" : "copy out", gpu: "compute", cpu: "compute" }[r.kind];
+      const s = `${label} ${fmtMs(r.d)}`;
+      if (e >= b - EPS && textW(s, 12) + 16 < w) text(x + w / 2, y + barH / 2, s, { fs: 12, ha: "center" });
+    }
+    a = b;
+  }
+  const tot = sum(segs);
+  if (tau >= tot - EPS) text(bx0 + tot * scale + 8, y + barH / 2, fmtMs(tot), { fs: 15, color: INK });
+}
+
+function niceStep(span) {
+  const raw = span / 6, p = 10 ** Math.floor(Math.log10(raw));
+  for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p;
+  return 10 * p;
+}
+
+function drawTop(op, k, g) {
+  const r = rowsOf(op)[k], T = DATA.texts[DTYPE][op];
+  text(60, 46, T.title[k], { fs: 23 });
+  text(60, 80, T.sub[k], { fs: 13.5, color: INK_2 });
+  if (DATA.dev) text(W - 60, 46, "DEVELOPMENT DATA: GPU times estimated", { fs: 13, color: "#b4471c", ha: "right", bold: true });
+  let gSegs, cSegs, cpuSub;
+  if (op === "keep") {
+    gSegs = [["copy", r.h2d], ...Array.from({ length: r.k }, () => ["gpu", r.gpu1]), ["copy", r.d2h]];
+    cSegs = Array.from({ length: r.k }, () => ["cpu", r.cpu1]);
+    cpuSub = "one core";
+  } else {
+    gSegs = [["copy", r.h2d], ["gpu", r.gpu], ["copy", r.d2h]];
+    cSegs = [["cpu", r.cpu]];
+    cpuSub = op === "add" ? "one core" : "4-CPU job";
+  }
+  const span = Math.max(sum(gSegs), sum(cSegs)), scale = (bx1 - bx0) / span, tau = g * span;
+  const step = niceStep(span);
+  for (let v = 0; v <= span + EPS; v += step) {
+    const x = bx0 + v * scale;
+    line(x, yGpu - 8, x, yCpu + barH + 6, { color: GRID });
+    text(x, yCpu + barH + 22, v === 0 ? "0" : tickMs(v), { fs: 11.5, color: MUTED, ha: "center" });
+  }
+  drawBar(yGpu, "GPU", "with copies", gSegs, scale, tau);
+  drawBar(yCpu, "CPU", cpuSub, cSegs, scale, tau);
+  if (g < 1) line(bx0 + tau * scale, yGpu - 10, bx0 + tau * scale, yCpu + barH + 8, { color: INK, lw: 1.5 });
+  // what the colors mean
+  const ly = 292;
+  [["copy", "copy between RAM and the GPU (PCIe)"], ["gpu", "compute on the GPU"], ["cpu", "compute on the CPU"]].reduce((x, [kind, s]) => {
+    rect(x, ly - 8, 16, 16, { fill: FILL[kind] });
+    text(x + 24, ly, s, { fs: 12.5, color: INK_2 });
+    return x + 24 + textW(s, 12.5) + 34;
+  }, bx0);
+}
+
+function logScale(v0, v1, p0, p1) {
+  const a = Math.log10(v0), b = Math.log10(v1);
+  return v => p0 + (Math.log10(v) - a) / (b - a) * (p1 - p0);
+}
+
+function series(op) {
+  const rows = rowsOf(op);
+  if (op === "keep") return {
+    xs: rows.map(r => r.k), labels: rows.map(r => `${r.k}`), title: "k, operations per copy",
+    lines: [["CPU", CPUC, false, rows.map(r => r.cpu)], ["GPU with copies", GPUC, false, rows.map(r => r.trip)],
+            ["GPU compute", GPUC, true, rows.map(r => r.k * r.gpu1)], ["copies", COPY, false, rows.map(r => r.h2d + r.d2h)]],
+  };
+  return {
+    xs: rows.map(r => r.n), labels: DATA.labels[DTYPE][op],
+    title: op === "matmul" ? "n, matrices of n × n numbers" : "n, numbers in a and in b",
+    lines: [["CPU", CPUC, false, rows.map(r => r.cpu)], ["GPU with copies", GPUC, false, rows.map(r => r.trip)],
+            ["GPU compute", GPUC, true, rows.map(r => r.gpu)], ["copies", COPY, false, rows.map(r => r.h2d + r.d2h)]],
+  };
+}
+
+function drawChart(op, k) {
+  const S = series(op), xs = S.xs;
+  const all = S.lines.flatMap(l => l[3]);
+  const lo = 10 ** Math.floor(Math.log10(Math.min(...all))), hi = 10 ** Math.ceil(Math.log10(Math.max(...all)));
+  const X = logScale(xs[0], xs[xs.length - 1], cx0 + 20, cx1 - 20), Y = logScale(lo, hi, cy1, cy0);
+  text(60, cy0 - 26, "Time for every size, both axes on log scales", { fs: 14, bold: true });
+  for (let p = Math.log10(lo); p <= Math.log10(hi) + EPS; p++) {
+    const y = Y(10 ** p);
+    line(cx0, y, cx1, y, { color: GRID });
+    text(cx0 - 10, y, tickMs(10 ** p), { fs: 11.5, color: MUTED, ha: "right" });
+  }
+  xs.forEach((x, i) => {
+    line(X(x), cy0, X(x), cy1, { color: GRID });
+    text(X(x), cy1 + 16, S.labels[i], { fs: 11.5, color: i === k ? INK : MUTED, ha: "center", bold: i === k });
+  });
+  text((cx0 + cx1) / 2, cy1 + 40, S.title, { fs: 12.5, color: INK_2, ha: "center" });
+  // where the GPU line goes below the CPU line
+  const c = DATA.cross[DTYPE][op], note = DATA.fmt[DTYPE][op].note, inside = c !== null && c > xs[0] * 1.0001;
+  if (inside) line(X(c), cy0, X(c), cy1, { color: INK_2, lw: 1 });
+  // the current size, then the crossover label on a white backing so the size line does not cross it
+  line(X(xs[k]), cy0, X(xs[k]), cy1, { color: AXIS, lw: 2 });
+  const nx = inside ? X(c) + 6 : cx0 + 24;
+  rect(nx - 3, cy0 + 3, textW(note, 12.5) + 6, 18, { fill: "#ffffff" });
+  text(nx, cy0 + 12, note, { fs: 12.5, color: INK_2 });
+  // lines, end labels pushed apart
+  for (const [, col, dashed, ys] of S.lines) {
+    const pts = ys.map((v, i) => `${X(xs[i]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    out.push(`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="${(2 * K).toFixed(2)}"`
+      + ` stroke-linejoin="round" stroke-linecap="round"${dashed ? ` stroke-dasharray="7 5"` : ""}/>`);
+    ys.forEach((v, i) => {
+      const r = i === k ? 6.5 : 4.5;
+      out.push(`<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${r}" fill="${dashed ? "#ffffff" : col}"`
+        + ` stroke="${dashed ? col : "#ffffff"}" stroke-width="${dashed ? 2 : 2}"/>`);
+    });
+  }
+  const ends = S.lines.map(([name, col, dashed, ys]) => ({ name, col, dashed, y: Y(ys[ys.length - 1]) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 18) ends[i].y = ends[i - 1].y + 18;
+  for (const e of ends) {
+    line(cx1 + 14, e.y, cx1 + 34, e.y, { color: e.col, lw: 2, dashed: e.dashed });
+    text(cx1 + 40, e.y, e.name, { fs: 12.5, color: INK });
+  }
+  rect(cx0, cy0, cx1 - cx0, cy1 - cy0 + 24, { cls: "seek" });
+}
+
+function makeView(op, label, unit) {
+  const n = () => rowsOf(op).length;
+  return {
+    id: op, label, unit, snap: 0.001, speed: 2, video: "",
+    speeds: [0.25, 0.4, 0.6, 0.8, 1, 1.5, 2],
+    get tmax() { return n() - 0.001; },
+    draw: t => { const k = indexOf(t, n()); drawTop(op, k, growthOf(t)); drawChart(op, k); },
+    seek: x => {
+      const S = series(op), X = logScale(S.xs[0], S.xs[S.xs.length - 1], cx0 + 20, cx1 - 20);
+      let best = 0;
+      S.xs.forEach((v, i) => { if (Math.abs(X(v) - x) < Math.abs(X(S.xs[best]) - x)) best = i; });
+      return best;
+    },
+  };
+}
+
+const VIEWS = [makeView("matmul", "Matrix product", "sizes"), makeView("add", "a + b", "sizes"),
+               makeView("keep", "Keep the data on the GPU", "steps")];
+
+// float32 / float64: a second switch next to the views (key D)
+(function () {
+  const css = document.createElement("style");
+  css.textContent = ".dtab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px;"
+    + " font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; font-family: var(--mono); }"
+    + " .dtab:hover { color: var(--ink); } .dtab[aria-pressed=\"true\"] { background: var(--primary); color: var(--primary-text); }";
+  document.head.appendChild(css);
+  const box = document.createElement("div");
+  box.className = "tabs"; box.id = "dtype"; box.setAttribute("role", "group"); box.setAttribute("aria-label", "Number type");
+  box.innerHTML = DTYPES.map(d => `<button class="dtab" type="button" data-d="${d}" aria-pressed="${d === DTYPE}" title="Key D">${d}</button>`).join("");
+  document.getElementById("tabs").after(box);
+  box.addEventListener("click", e => { const b = e.target.closest(".dtab"); if (b) setDtype(b.dataset.d); });
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "d" || e.key === "D") setDtype(DTYPE === "float32" ? "float64" : "float32");
+  });
+})();
+function setDtype(d) {
+  if (d === DTYPE) return;
+  DTYPE = d;
+  DATA.views = DATA.variants[d];
+  document.querySelectorAll(".dtab").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.d === d)));
+  stop();
+  buildViewChrome();
+  render();
+}
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

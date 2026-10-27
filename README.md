@@ -8,5 +8,6 @@ Material for the Operating Systems and Parallel Computing course: the interactiv
 - [MLFQ, step by step](https://mturilli.github.io/ospc-materials/animations/mlfq.html): a multi-level feedback queue with a long, a short and an interactive job. See which queue each job ends up in, then why the scheduler needs a priority boost.
 - [Three Linux schedulers, step by step](https://mturilli.github.io/ospc-materials/animations/linux-schedulers.html): O(1), CFS and EEVDF run the same three jobs. Step through them one event at a time and compare turnaround and response.
 - [Queues and cores, step by step](https://mturilli.github.io/ospc-materials/animations/multicore-queues.html): one shared queue on four cores, then one queue per core. See how jobs move between cores, the load imbalance when a job finishes, and how work stealing fixes it.
+- [When does the GPU pay off?](https://mturilli.github.io/ospc-materials/animations/gpu-offload.html): copy the data to the GPU, compute, copy the result back, and compare with the same work on the CPU, measured on our cluster. See from what size a matrix product pays off, why adding two arrays does not, and what changes when the data stays on the GPU.
 
 Each animation is a single HTML file with no dependencies. Open the link, or download the file and open it in a browser. It also works offline.
