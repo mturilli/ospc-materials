@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 1: Where the Memory Went</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --axis: #c3c2b7; --grid: #e1e0d9;
+  --surface: #ffffff; --panel: #f7f6f2; --accent: #eb6834; --blue: #2a78d6; --good: #1baf7a; --bad: #c4352b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 15px/1.5 Arial, Helvetica, sans-serif; }
+code, .mono { font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 13px; }
+header { padding: 18px 24px 6px; }
+header .kicker { color: var(--ink-2); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+header h1 { margin: 2px 0 2px; font-size: 26px; }
+header p { margin: 0; color: var(--ink-2); max-width: 900px; }
+.layout { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 12px 24px 30px; align-items: start; }
+.side { position: sticky; top: 10px; }
+.steps { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: step; }
+.steps li { counter-increment: step; padding: 6px 10px 6px 38px; position: relative; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.steps li::before { content: counter(step); position: absolute; left: 8px; top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--axis); text-align: center; line-height: 20px; font-size: 12px; color: var(--ink-2); background: #fff; }
+.steps li.done::before { background: var(--panel); border-color: var(--ink-2); }
+.steps li.on { background: var(--panel); color: var(--ink); font-weight: bold; }
+.steps li.on::before { border-color: var(--ink); color: var(--ink); }
+.card { background: var(--panel); border-radius: 10px; padding: 14px 16px; }
+.card h2 { margin: 0 0 6px; font-size: 18px; }
+.card .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin: 10px 0 4px; }
+.card p { margin: 6px 0; }
+.options { display: grid; gap: 6px; margin: 6px 0; }
+.options button { text-align: left; font: inherit; padding: 7px 10px; border-radius: 6px; border: 1.5px solid var(--axis); background: #fff; cursor: pointer; }
+.options button:hover:not(:disabled) { border-color: var(--ink-2); }
+.options button.chosen { border-color: var(--ink); }
+.options button.right { border-color: var(--good); background: #eaf7f1; }
+.options button.wrong { border-color: var(--bad); background: #fbeceb; }
+.options button:disabled { cursor: default; color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.actions button, .transport button, .transport select { font: inherit; border: 1px solid var(--axis); background: #fff; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.actions button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+.actions button:disabled { opacity: .45; cursor: default; }
+.verdict { font-weight: bold; }
+.verdict.right { color: #12784f; } .verdict.wrong { color: var(--bad); }
+.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.transport .clock { font-family: Menlo, Consolas, monospace; font-size: 17px; margin-left: 10px; }
+.transport .note { color: var(--ink-2); font-size: 13px; }
+.scrub { width: 100%; height: 30px; display: block; cursor: pointer; touch-action: none; margin-bottom: 8px; }
+.visual svg { display: block; max-width: 100%; height: auto; }
+.visual h3 { font-size: 14px; font-weight: normal; color: var(--ink-2); margin: 8px 0 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); font-size: 12.5px; margin: 2px 0; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.line { height: 3px; } .sw.dash { height: 0; border-top: 2px dashed var(--ink-2); border-radius: 0; }
+.term { background: #1d1d1b; color: #e9e8e2; font-family: Menlo, Consolas, monospace; font-size: 12.5px; border-radius: 8px;
+  padding: 10px 12px; min-height: 92px; white-space: pre-wrap; margin-top: 10px; }
+.term .p { color: #9fd3a8; }
+footer { color: var(--muted); font-size: 12.5px; padding: 0 24px 24px; max-width: 1000px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; padding: 10px 16px 24px; }
+  header, footer { padding-left: 16px; padding-right: 16px; }
+  .side { position: static; }
+}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Lab 1 · The Nightly Report</div>
+  <h1>Task 1: Where the Memory Went</h1>
+  <p>A replay of <code>steps/report.py</code> on the whole file, step by step. At each step, predict what happens, then watch the recording.</p>
+</header>
+<div class="layout">
+  <aside class="side">
+    <ol class="steps" id="steps"></ol>
+    <div class="card" id="card"></div>
+  </aside>
+  <main class="visual">
+    <div class="transport">
+      <button id="play">&#9654; Play</button>
+      <button id="restart">&#8634; Start of the step</button>
+      <label class="note">Speed <select id="speed"></select></label>
+      <span class="clock" id="clock"></span>
+    </div>
+    <svg class="scrub" id="scrub"></svg>
+    <div id="visual"></div>
+  </main>
+</div>
+<footer>Recorded with <code>tools/record.py</code> in the course container on a Mac (Docker VM with 4 CPUs and 4 GiB; container limit 2 GiB, no swap), 19 October 2026. Your laptop gives different times. A copy of <code>report.py</code> printed the time after each line; the program is otherwise unchanged.</footer>
+<script>
+const DATA = {"t":[0.0,0.051,0.1,0.154,0.2,0.251,0.301,0.35,0.401,0.451,0.502,0.555,0.601,0.651,0.705,0.75,0.803,0.851,0.904,0.95,1.0,1.052,1.1,1.151,1.201,1.25,1.3,1.35,1.4,1.454,1.5,1.551,1.6,1.65,1.701,1.755,1.801,1.855,1.902,1.95,2.0,2.054,2.1,2.154,2.205,2.252,2.304,2.351,2.403,2.45,2.504,2.554,2.601,2.655,2.703,2.752,2.803,2.852,2.905,2.95,3.003,3.053,3.102,3.154,3.201,3.254,3.3,3.354,3.403,3.453,3.503,3.55,3.601,3.65,3.7,3.75,3.8,3.85,3.903,3.952,4.004,4.051,4.1,4.15,4.2,4.254,4.303,4.35,4.4,4.45,4.5,4.551,4.6,4.653,4.7,4.755,4.8,4.855,4.901,4.952,5.0,5.054,5.105,5.155,5.201,5.254,5.301,5.355,5.405,5.455,5.501,5.55,5.6,5.655,5.705,5.755,5.804,5.852,5.905,5.95,6.003,6.055,6.104,6.154,6.202,6.254,6.301,6.351,6.4,6.45,6.5,6.55,6.6,6.65,6.705,6.755,6.805,6.855,6.901,6.95,7.005,7.051,7.104,7.151,7.205,7.251,7.305,7.351,7.405,7.452,7.505,7.552,7.6,7.652,7.7,7.751,7.8,7.854,7.901,7.951,8.0,8.054,8.1,8.153,8.201,8.251,8.301,8.352,8.4,8.45,8.5,8.551,8.601,8.65,8.701,8.751,8.8,8.854,8.9,8.95,9.002,9.05,9.104,9.15,9.204,9.25,9.305,9.351,9.405,9.451,9.501,9.551,9.6,9.652,9.7,9.751,9.805,9.852,9.905,9.952,10.001,10.05,10.101,10.15,10.2,10.25,10.303,10.353,10.4,10.455,10.501,10.555,10.601,10.651,10.7,10.754,10.8,10.854,10.9,10.954,11.001,11.053,11.101,11.153,11.203,11.252,11.304,11.351,11.404,11.45,11.505,11.55,11.6,11.654,11.703,11.753,11.801,11.854,11.901,11.951,12.001,12.054,12.1,12.154,12.2,12.254,12.303,12.353,12.403,12.45,12.504,12.555,12.601,12.65,12.705,12.751,12.805,12.851,12.905,12.953,13.004,13.052,13.104,13.151,13.2,13.25,13.304,13.35,13.404,13.45,13.504,13.55,13.6,13.65,13.701,13.755,13.801,13.855,13.901,13.951,14.0,14.053,14.1,14.153,14.2,14.253,14.301,14.353,14.4,14.452,14.504,14.554,14.601,14.655,14.703,14.755,14.802,14.855,14.902,14.953,15.005,15.054,15.1,15.155,15.204,15.255,15.303,15.351,15.401,15.452],"rss":[0.5,21.8,25.5,32.5,33.5,57.6,69.7,75.9,84.2,90.9,91.2,93.4,94.7,104.6,105.2,106.1,106.1,106.7,108.6,109.7,111.0,112.3,123.2,134.9,141.6,150.2,159.1,168.2,176.4,185.0,191.5,200.1,209.0,218.9,226.3,235.0,241.6,252.6,262.7,269.9,276.4,285.0,293.8,303.7,311.3,317.9,326.5,333.1,341.6,350.6,360.9,367.9,374.5,383.1,391.7,400.7,411.4,418.0,424.5,431.1,441.7,450.8,460.9,468.0,474.6,483.1,489.7,501.4,509.4,516.0,524.6,531.2,539.8,548.8,558.9,565.7,574.5,581.3,587.8,594.4,605.3,612.0,620.6,631.1,637.9,644.4,651.0,659.6,666.2,675.0,681.7,691.4,701.1,707.6,714.2,722.8,729.4,740.4,747.4,753.5,763.6,770.8,779.4,788.0,794.8,806.7,809.8,819.6,828.7,836.1,842.6,849.2,855.8,864.4,873.2,879.9,889.5,899.2,905.8,912.4,921.0,929.6,938.6,949.1,955.8,962.4,969.0,977.6,986.3,993.1,1002.2,1008.3,1017.4,1027.1,1034.2,1120.2,1149.1,1167.9,1211.9,1221.1,1267.7,1277.9,1303.8,1333.3,1344.7,1398.7,1474.0,1484.0,1504.0,1512.4,1533.6,1533.6,1550.5,1584.9,1375.7,1036.1,1036.1,1036.1,1082.2,1126.2,1184.2,1216.2,1302.2,1320.1,1320.1,1320.1,1326.2,1336.2,1372.2,1380.2,1382.2,1382.2,1392.3,1418.3,1430.3,1472.3,1482.3,1484.3,1484.3,1484.2,1504.2,1536.2,1544.2,1584.2,1590.3,1590.3,1590.3,1590.3,1616.3,1646.3,1656.3,1694.3,1702.3,1706.4,1706.4,1714.4,1728.4,1738.4,1750.4,1763.9,1781.9,1712.0,1583.8,1556.5,1438.9,1352.3,1183.8,1191.4,1321.6,1506.1,1642.8,1706.8,1647.8,1657.8,1667.8,1677.8,1687.8,1697.8,1706.4,1402.7,1265.8,1321.7,1327.7,1333.7,1339.7,1345.7,1349.7,1336.6,1201.1,1223.2,1237.0,1243.0,1247.0,1255.0,1259.0,1264.1,1266.2,1300.2,1311.0,1317.0,1323.0,1329.0,1335.0,1306.2,1368.2,1391.0,1397.0,1403.0,1409.0,1415.0,1386.2,1449.2,1468.0,1474.0,1480.0,1486.0,1492.0,1463.2,1531.2,1556.0,1562.0,1568.0,1574.0,1578.0,1600.4,1603.2,1634.0,1638.0,1644.0,1650.0,1656.0,1660.2,1657.2,1709.2,1716.1,1722.1,1726.1,1734.1,1738.1,1741.3,1764.9,1793.8,1799.8,1805.8,1811.8,1817.8,1821.8,1801.0,1863.0,1877.8,1883.8,1889.8,1895.8,1901.8,1908.1,1915.0,1963.0,1969.8,1975.8,1981.8,1987.8,1991.8,2022.1,2012.7,2043.5,2047.5,2053.5,2059.5,2065.5,2069.8],"cur":[11.3,21.3,25.6,32.6,34.1,38.8,44.4,49.2,58.0,60.7,61.7,64.0,65.5,75.9,77.1,78.6,79.1,79.9,82.4,84.2,85.7,87.7,98.9,110.4,117.2,125.7,134.7,143.9,151.9,160.7,167.2,175.7,184.7,194.7,202.2,210.7,217.4,228.4,238.7,245.7,252.2,260.9,269.7,279.7,287.2,293.9,302.4,308.9,317.7,326.7,336.9,343.9,350.4,359.2,367.7,376.7,387.4,394.2,400.7,407.2,417.9,426.9,437.2,444.2,450.7,459.4,465.9,477.7,485.7,492.4,500.9,507.4,516.2,525.2,535.2,542.2,550.9,557.7,564.2,570.9,581.9,588.4,597.2,607.7,614.4,620.9,627.7,636.2,642.7,651.7,658.4,668.2,677.7,684.4,690.9,699.4,706.2,717.2,724.2,730.4,740.7,747.9,756.4,765.2,771.9,783.9,786.9,796.9,805.9,813.2,819.7,826.4,832.9,841.7,850.4,857.2,866.9,876.4,883.2,889.7,898.2,906.9,915.9,926.4,933.2,939.9,946.4,954.9,963.9,970.7,979.7,985.9,994.9,1004.7,1011.9,1098.1,1126.8,1145.8,1190.1,1199.1,1245.8,1256.1,1281.8,1311.6,1322.8,1377.1,1452.3,1462.6,1482.6,1490.8,1512.1,1512.1,1529.1,1563.6,1353.8,1011.6,1011.6,1011.6,1057.8,1101.8,1160.1,1192.1,1278.3,1296.3,1296.3,1296.3,1302.3,1312.3,1348.3,1356.3,1358.5,1358.5,1368.5,1394.5,1406.5,1448.7,1458.7,1460.7,1460.7,1462.2,1482.2,1514.5,1522.5,1562.5,1568.7,1568.7,1568.7,1568.7,1594.7,1624.7,1634.7,1672.9,1680.9,1684.9,1684.9,1692.9,1706.9,1716.9,1729.1,1742.6,1760.6,1690.4,1562.1,1562.0,1417.0,1330.3,1160.7,1167.7,1298.2,1482.7,1619.7,1683.9,1624.6,1634.6,1644.6,1654.6,1664.6,1674.6,1683.3,1379.4,1241.9,1298.1,1304.1,1310.1,1316.1,1322.1,1326.1,1312.5,1177.2,1199.2,1212.9,1218.9,1222.9,1231.2,1235.2,1240.2,1242.3,1276.3,1287.1,1293.1,1299.1,1305.3,1311.3,1282.2,1344.5,1367.2,1373.2,1379.2,1385.5,1391.5,1362.4,1428.6,1447.4,1453.6,1459.6,1465.6,1471.6,1442.8,1510.8,1535.8,1541.8,1547.8,1553.8,1557.8,1580.0,1582.9,1613.9,1617.9,1623.9,1629.9,1635.9,1640.2,1637.1,1689.1,1696.1,1702.1,1706.1,1714.1,1718.1,1721.3,1745.0,1774.0,1780.0,1786.0,1792.0,1798.0,1802.0,1781.1,1843.4,1858.1,1864.1,1870.1,1876.1,1882.1,1890.4,1895.3,1943.3,1950.3,1956.3,1962.3,1968.3,1972.3,2002.5,1995.4,2026.4,2030.4,2036.4,2042.4,2045.8,2048.0],"marks":[{"t":0.014,"rss":10,"label":"start"},{"t":10.285,"rss":1184,"label":"read_csv done"},{"t":10.993,"rss":1256,"label":"to_datetime done"},{"t":11.033,"rss":1319,"label":"revenue done"},{"t":11.47,"rss":1233,"label":"month 1 done"},{"t":11.861,"rss":1306,"label":"month 2 done"},{"t":12.217,"rss":1386,"label":"month 3 done"},{"t":12.565,"rss":1463,"label":"month 4 done"},{"t":12.919,"rss":1551,"label":"month 5 done"},{"t":13.272,"rss":1629,"label":"month 6 done"},{"t":13.651,"rss":1709,"label":"month 7 done"},{"t":14.029,"rss":1791,"label":"month 8 done"},{"t":14.412,"rss":1873,"label":"month 9 done"},{"t":14.801,"rss":1963,"label":"month 10 done"},{"t":15.178,"rss":2039,"label":"month 11 done"}],"kill":15.452,"end":15.5,"events":{"low":0,"high":0,"max":75,"oom":1,"oom_kill":1,"oom_group_kill":0},"readPeak":1781.9,"rssAt":{"read":1184,"dates":1256,"revenue":1319},"curAt":{"month11":2010}};
+'use strict';
+// Shared by the three explainers: the stages (predict, observe, explain), the transport, and SVG helpers.
+const NS = 'http://www.w3.org/2000/svg';
+const C = { ink: '#0b0b0b', ink2: '#52514e', muted: '#898781', axis: '#c3c2b7', grid: '#e1e0d9', panel: '#f7f6f2',
+  blue: '#2a78d6', orange: '#eb6834', green: '#1baf7a', yellow: '#eda100', pink: '#e87ba4', bad: '#c4352b',
+  blueFill: '#cde2fb', orangeFill: '#fbd9c9', greenFill: '#c9eedd', grayFill: '#e9e8e2', yellowFill: '#f6eec4' };
+const $ = id => document.getElementById(id);
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, attrs = {}) {
+  const t = el('text', Object.assign({ x, y, 'font-size': 13, fill: C.ink2, 'font-family': 'Arial, Helvetica, sans-serif' }, attrs), parent);
+  t.textContent = s;
+  return t;
+}
+function box(parent, x, y, w, h, fill, stroke, attrs = {}) {
+  return el('rect', Object.assign({ x, y, width: Math.max(0, w), height: Math.max(0, h), rx: 5, fill, stroke: stroke || 'none', 'stroke-width': 1.5 }, attrs), parent);
+}
+function arrow(parent, x1, y1, x2, y2, color, attrs = {}) {
+  const id = 'ah' + color.replace('#', '');
+  if (!document.getElementById(id)) {
+    // Arrowheads live in a hidden SVG of their own, so that redrawing a picture never removes them.
+    let host = document.getElementById('markers');
+    if (!host) { host = el('svg', { id: 'markers', width: 0, height: 0, style: 'position:absolute' }, document.body); el('defs', {}, host); }
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, host.firstChild);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }, m);
+  }
+  return el('line', Object.assign({ x1, y1, x2, y2, stroke: color, 'stroke-width': 2, 'marker-end': `url(#${id})` }, attrs), parent);
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = f => clamp(f, 0, 1);
+function interp(ts, vs, t) {
+  if (t <= ts[0]) return vs[0];
+  for (let k = 1; k < ts.length; k++) if (ts[k] >= t) {
+    const f = (t - ts[k - 1]) / ((ts[k] - ts[k - 1]) || 1);
+    return vs[k - 1] + (vs[k] - vs[k - 1]) * f;
+  }
+  return vs[vs.length - 1];
+}
+const fmt = n => Math.round(n).toLocaleString('en-US');
+let clipCount = 0;
+
+// A chart over time that is drawn up to the playhead, so that it grows as the replay plays.
+function timeChart(host, o) {
+  const W = o.width || 760, H = o.height || 200, m = { l: 74, r: 18, t: 10, b: 26 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const x = t => m.l + pw * clamp((t - o.t0) / (o.t1 - o.t0), 0, 1);
+  const y = v => m.t + ph * (1 - clamp(v / o.ymax, 0, 1));
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, host);
+  for (const b of o.bands || []) {
+    el('rect', { x: x(b.t0), y: m.t, width: x(b.t1) - x(b.t0), height: ph, fill: b.fill || C.panel }, svg);
+    if (b.label) txt(svg, (x(b.t0) + x(b.t1)) / 2, m.t + ph - 8, b.label, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.ink2 });
+  }
+  for (const v of o.yticks || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: C.grid }, svg);
+    txt(svg, m.l - 8, y(v) + 4, o.yfmt(v), { 'text-anchor': 'end', 'font-size': 12 });
+  }
+  for (const s of o.xticks || []) {
+    txt(svg, x(s), H - 6, o.xfmt ? o.xfmt(s) : `${s} s`, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.muted });
+  }
+  el('line', { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: C.axis }, svg);
+  const cid = `clip${++clipCount}`;
+  const clip = el('rect', { x: m.l, y: 0, width: 0, height: H }, el('clipPath', { id: cid }, el('defs', {}, svg)));
+  const g = el('g', { 'clip-path': `url(#${cid})` }, svg);
+  for (const s of o.series) {
+    if (s.kind === 'area') {
+      let d = '';
+      s.t.forEach((t, k) => { d += `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`; });
+      for (let k = s.t.length - 1; k >= 0; k--) d += `L${x(s.t[k]).toFixed(1)},${y(s.base ? s.base[k] : 0).toFixed(1)}`;
+      el('path', { d: d + 'Z', fill: s.color, 'fill-opacity': 0.85, stroke: '#fff', 'stroke-width': 0.8 }, g);
+    } else {
+      const d = s.t.map((t, k) => `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`).join('');
+      el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.2, 'stroke-linejoin': 'round' }, g);
+    }
+  }
+  for (const h of o.hlines || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(h.v), y2: y(h.v), stroke: C.ink2, 'stroke-width': 1.5, 'stroke-dasharray': '6 4' }, svg);
+    if (h.label) txt(svg, m.l + pw - 4, y(h.v) - 6, h.label, { 'text-anchor': 'end', 'font-size': 12, fill: C.ink2 });
+  }
+  const marks = (o.marks || []).map(mk => {
+    const gm = el('g', { visibility: 'hidden' }, svg);
+    el('line', { x1: x(mk.t), x2: x(mk.t), y1: y(mk.v) - 9, y2: y(mk.v) + 9, stroke: C.orange, 'stroke-width': 2 }, gm);
+    if (mk.label) txt(gm, x(mk.t), y(mk.v) - 13, mk.label, { 'text-anchor': 'middle', 'font-size': 11, fill: C.ink2 });
+    return [mk.t, gm];
+  });
+  const head = el('line', { y1: m.t, y2: m.t + ph, stroke: C.ink, 'stroke-width': 1.5 }, svg);
+  return {
+    update(t) {
+      clip.setAttribute('width', Math.max(0, x(t) - m.l + 1));
+      head.setAttribute('x1', x(t)); head.setAttribute('x2', x(t));
+      head.setAttribute('visibility', t >= o.t0 && t <= o.t1 + 1e-9 ? 'visible' : 'hidden');
+      for (const [mt, gm] of marks) gm.setAttribute('visibility', t >= mt ? 'visible' : 'hidden');
+    },
+  };
+}
+function legendHtml(items) {
+  return '<div class="legend">' + items.map(it => `<span><i class="sw ${it.kind || ''}" ${it.color ? `style="background:${it.color}"` : ''}></i>${it.name}</span>`).join('') + '</div>';
+}
+
+// The stages: each one asks for a prediction, plays its part of the replay at constant speed, then explains.
+function Explainer(cfg) {
+  const S = { k: 0, T: cfg.stages[0].t0, playing: false, last: null, speed: cfg.speed || 1,
+    chosen: cfg.stages.map(() => null), seen: cfg.stages.map(() => false) };
+  const END = cfg.stages[cfg.stages.length - 1].t1;
+  const stageAt = t => { for (let k = cfg.stages.length - 1; k >= 0; k--) if (t >= cfg.stages[k].t0 - 1e-9) return k; return 0; };
+
+  $('steps').innerHTML = cfg.stages.map((s, k) => `<li data-k="${k}">${s.title}</li>`).join('');
+  $('steps').addEventListener('click', e => { const li = e.target.closest('li'); if (li) go(+li.dataset.k); });
+  $('speed').innerHTML = [0.25, 0.5, 1, 2, 5, 10].map(v => `<option value="${v}" ${v === S.speed ? 'selected' : ''}>${v}&times;</option>`).join('');
+  $('speed').onchange = e => { S.speed = +e.target.value; };
+  $('play').onclick = () => S.playing ? pause() : play();
+  $('restart').onclick = () => { pause(); seek(cfg.stages[S.k].t0); };
+
+  function card() {
+    const s = cfg.stages[S.k], ch = S.chosen[S.k], shown = S.seen[S.k];
+    const opts = s.options.map((o, i) => {
+      let cls = '';
+      if (shown) cls = i === s.answer ? 'right' : (i === ch ? 'wrong' : '');
+      else if (i === ch) cls = 'chosen';
+      return `<button data-i="${i}" class="${cls}" ${shown || ch !== null ? 'disabled' : ''}>${String.fromCharCode(65 + i)}. ${o}</button>`;
+    }).join('');
+    let verdict = '';
+    if (shown) verdict = ch === null ? '<p class="verdict">You did not predict this one.</p>'
+      : ch === s.answer ? '<p class="verdict right">Your prediction was right.</p>' : '<p class="verdict wrong">Not what happened.</p>';
+    $('card').innerHTML = `<h2>${S.k + 1}. ${s.title}</h2>` +
+      `<div class="label">Predict</div><p>${s.q}</p><div class="options">${opts}</div>` +
+      (shown ? `<div class="label">What happened</div>${verdict}${s.explain}`
+        : `<p class="note" style="color:var(--ink-2);font-size:13px">${ch === null ? 'Choose an answer, then watch.' : 'Now watch what happens.'}</p>`) +
+      `<div class="actions">` +
+      (shown ? (S.k + 1 < cfg.stages.length ? `<button class="primary" id="next">Next step</button>` : '') :
+        `<button class="primary" id="watch">${ch === null ? 'Skip the prediction and watch' : 'Watch'}</button>`) +
+      `</div>`;
+    $('card').querySelectorAll('.options button').forEach(b => b.onclick = () => {
+      S.chosen[S.k] = +b.dataset.i; seek(s.t0); card(); play();
+    });
+    const w = $('watch'); if (w) w.onclick = () => { if (S.T >= s.t1 - 1e-6) seek(s.t0); play(); };
+    const n = $('next'); if (n) n.onclick = () => go(S.k + 1);
+    [...$('steps').children].forEach((li, k) => { li.classList.toggle('on', k === S.k); li.classList.toggle('done', S.seen[k]); });
+  }
+  function go(k) { pause(); S.k = k; S.T = cfg.stages[k].t0; card(); render(); }
+  function reveal() { if (!S.seen[S.k]) { S.seen[S.k] = true; card(); } }
+  function seek(t) {
+    S.T = clamp(t, cfg.stages[0].t0, END);
+    const k = stageAt(S.T);
+    if (k !== S.k) { S.k = k; card(); }
+    if (S.T >= cfg.stages[S.k].t1 - 1e-6) reveal();
+    render();
+  }
+  function play() {
+    const s = cfg.stages[S.k];
+    if (S.T >= s.t1 - 1e-6) { if (S.k + 1 < cfg.stages.length) { go(S.k + 1); } return; }
+    S.playing = true; S.last = null; $('play').innerHTML = '&#10074;&#10074; Pause';
+    requestAnimationFrame(frame);
+  }
+  function pause() { S.playing = false; $('play').innerHTML = '&#9654; Play'; }
+  function frame(now) {
+    if (!S.playing) return;
+    const s = cfg.stages[S.k];
+    if (S.last !== null) S.T += (now - S.last) / 1000 * S.speed * (s.rate || 1);
+    S.last = now;
+    if (S.T >= s.t1) { S.T = s.t1; pause(); reveal(); render(); return; }
+    render();
+    requestAnimationFrame(frame);
+  }
+  // The timeline under the transport: one segment per step.
+  const scrub = $('scrub');
+  function drawScrub() {
+    scrub.innerHTML = '';
+    const W = scrub.clientWidth || 700, H = 30, t0 = cfg.stages[0].t0;
+    scrub.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const x = t => 6 + (W - 12) * (t - t0) / (END - t0);
+    cfg.stages.forEach((s, k) => el('rect', { x: x(s.t0) + 1, y: 11, width: Math.max(1, x(s.t1) - x(s.t0) - 2), height: 8, rx: 3, fill: k % 2 ? '#d9d8d1' : '#c9c8c0' }, scrub));
+    S.knob = el('circle', { cy: 15, r: 7, fill: C.ink, stroke: '#fff', 'stroke-width': 2 }, scrub);
+    S.sx = x;
+  }
+  let drag = false;
+  const toT = ev => { const b = scrub.getBoundingClientRect(); const t0 = cfg.stages[0].t0; return t0 + clamp((ev.clientX - b.left - 6) / (b.width - 12), 0, 1) * (END - t0); };
+  scrub.onpointerdown = ev => { drag = true; scrub.setPointerCapture(ev.pointerId); pause(); seek(toT(ev)); };
+  scrub.onpointermove = ev => { if (drag) seek(toT(ev)); };
+  scrub.onpointerup = () => { drag = false; };
+  window.addEventListener('resize', () => { drawScrub(); render(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.key === ' ') { e.preventDefault(); S.playing ? pause() : play(); }
+  });
+
+  function render() {
+    $('clock').textContent = cfg.clock(S.T, cfg.stages[S.k]);
+    if (S.knob) S.knob.setAttribute('cx', S.sx(S.T));
+    cfg.draw(S.T, S.k);
+  }
+  drawScrub(); card(); render();
+}
+
+// Task 1: the report is killed. DATA comes from a recording of report.py (tools/record.py --memory)
+// with a mark printed after each line of the script.
+const D = DATA;
+const mark = name => D.marks.find(m => m.label === name).t;
+const READ = mark('read_csv done'), DATES = mark('to_datetime done'), REVENUE = mark('revenue done');
+const MONTHS = D.marks.filter(m => m.label.startsWith('month')).map(m => m.t);
+const KILL = D.kill, AFTER = 6;
+
+const stages = [
+  { title: 'Reading the file', t0: 0, t1: READ,
+    q: 'The file <code>sales_2025.csv</code> takes 498 MiB on disk. How much memory will the table <code>orders</code> take once <code>read_csv</code> has read it?',
+    options: ['About 500 MiB, the size of the file', 'About 900 MiB', 'About 1,800 MiB'], answer: 1,
+    explain: `<p><code>report.py</code> prints it: <b>887 MiB</b>. The table has 9 columns of 8.4 million values. Each number
+      column takes 64 MiB (8 bytes per value); each text column takes between 104 and 144 MiB.</p>
+      <p>The process holds more than the table. When <code>read_csv</code> returns, its RSS is <b>${fmt(D.rssAt.read)} MiB</b>,
+      and while reading it reached <b>${fmt(D.readPeak)} MiB</b>: the parser needs working memory too. What has to fit is
+      the peak, not only the final table.</p>` },
+  { title: 'Dates and revenue', t0: READ, t1: REVENUE,
+    q: '<code>orders["revenue"] = orders["quantity"] * orders["unit_price"]</code> adds one column of 8.4 million <code>float64</code> values. How much memory does it add?',
+    options: ['About 8 MiB', 'About 64 MiB', 'About 640 MiB'], answer: 1,
+    explain: `<p>8.4 million values &times; 8 bytes = 67 MB = <b>64 MiB</b>. The RSS grows by
+      ${fmt(D.rssAt.dates - D.rssAt.read)} MiB while <code>to_datetime</code> converts the dates, then by
+      ${fmt(D.rssAt.revenue - D.rssAt.dates)} MiB for the revenue: <b>${fmt(D.rssAt.revenue)} MiB</b>.</p>` },
+  { title: 'Twelve monthly tables', t0: REVENUE, t1: MONTHS[MONTHS.length - 1],
+    q: '<code>orders[orders["order_date"].dt.month == 1]</code> selects the January orders. Does the new table share memory with <code>orders</code>?',
+    options: ['Yes: it only points to the January rows of <code>orders</code>', 'No: it is a new table, with a copy of those rows'], answer: 1,
+    explain: `<p>Selecting rows with a condition copies them. January has 715,716 orders: a new table of <b>80 MiB</b>.
+      Every month adds about 80 MiB, so the twelve monthly tables together are a second copy of the whole table.</p>
+      <p>The kernel limits the memory of the container's processes together, as one group. After month 11 they use
+      <b>${fmt(D.curAt.month11)} MiB</b> (<code>memory.current</code>), and their limit (<code>memory.max</code>) is
+      2 GiB: 2,048 MiB.</p>` },
+  { title: 'December', t0: MONTHS[MONTHS.length - 1], t1: D.end,
+    q: `December needs about 80 MiB more, and about ${fmt(2048 - D.curAt.month11)} MiB are left. What happens?`,
+    options: ['Python raises a <code>MemoryError</code> and prints a traceback', 'The kernel kills the process', 'The process slows down, but finishes'], answer: 1,
+    explain: `<p>The kernel counts every page the process touches as memory in use by the container. When the memory
+      in use (<code>memory.current</code>) reaches the limit (<code>memory.max</code>) and nothing more can be freed (the
+      container has no swap), the kernel's out-of-memory killer sends <b>SIGKILL</b> to the process.
+      <code>memory.events</code> counts it: <code>oom_kill 1</code>. The count adds up until the container stops: after
+      the pipeline and the run on its own, you saw 2.</p>
+      <p>A process cannot catch SIGKILL: no <code>MemoryError</code>, no traceback, nothing from Python. The shell prints
+      <code>Killed</code>, and the exit status is 128 + 9 = <b>137</b>. The <code>pd.concat</code> on the next line never ran.</p>` },
+  { title: 'The missing line', t0: D.end, t1: D.end + AFTER,
+    q: 'Run as <code>python3 steps/report.py | tee /tmp/report.log</code>, the line <code>report: loaded …</code> never reaches the log. Where was it when the process was killed?',
+    options: ['In the pipe, between Python and <code>tee</code>', 'In Python\'s output buffer, in the memory of the process', 'In the page cache, on its way to the disk'], answer: 1,
+    explain: `<p>When its output is a terminal, Python writes every line at once. When its output is a pipe, Python
+      collects it in a buffer, and writes the buffer when it is full or when the program ends. SIGKILL ends the process
+      at once, and the buffer goes with it: <code>tee</code> reads nothing, and the log stays empty.</p>
+      <p>The shell prints no <code>Killed</code> this time. It reports a pipeline by its last command, <code>tee</code>,
+      which ended normally: <code>$?</code> is 0, and only <code>PIPESTATUS</code> shows <code>137 0</code>.</p>` },
+];
+
+const V = $('visual');
+V.innerHTML = `<h3>Memory of <code>report.py</code> (RSS), sampled every 50 ms</h3>` +
+  legendHtml([{ name: 'RSS', color: C.blue, kind: 'line' }, { name: 'limit of the container (memory.max): 2 GiB', kind: 'dash' }, { name: 'end of a month', color: C.orange, kind: 'line' }]) +
+  `<div id="chart"></div><h3 id="schemaTitle"></h3><div id="schema"></div><div class="term" id="term"></div>`;
+const chart = timeChart($('chart'), {
+  width: 760, height: 210, t0: 0, t1: D.end, ymax: 2200, yticks: [0, 512, 1024, 1536, 2048],
+  yfmt: v => v === 0 ? '0' : `${v / 1024} GiB`, xticks: [0, 2, 4, 6, 8, 10, 12, 14],
+  bands: [{ t0: 0, t1: READ, label: 'read_csv' }, { t0: REVENUE, t1: D.end, label: 'monthly tables', fill: '#fbf3ee' }],
+  series: [{ t: D.t, v: D.rss, color: C.blue }],
+  hlines: [{ v: 2048 }],
+  marks: MONTHS.map((t, k) => ({ t, v: interp(D.t, D.rss, t), label: k % 2 === 0 ? String(k + 1) : '' })),
+});
+const sv = el('svg', { viewBox: '0 0 760 170', width: 760, height: 170 }, $('schema'));
+const g = el('g', {}, sv);
+
+function drawContainer(t) {
+  $('schemaTitle').innerHTML = 'Inside the container: the memory in use (<code>memory.current</code>) and what makes it up';
+  const x0 = 30, W = 680, px = W / 2048, y0 = 46, h = 56;
+  const cur = Math.min(2048, interp(D.t, D.cur, Math.min(t, D.kill)));
+  txt(g, x0, 30, '0', { 'font-size': 12 });
+  txt(g, x0 + W, 30, 'limit (memory.max): 2,048 MiB', { 'text-anchor': 'end', 'font-size': 12 });
+  box(g, x0, y0, W, h, '#fff', C.axis, { rx: 3 });
+  let x = x0;
+  const block = (mib, fill, edge, label, small) => {
+    const w = mib * px;
+    box(g, x, y0, w, h, fill, edge, { rx: 2, 'stroke-width': 1 });
+    if (label && w > (small ? 12 : label.length * 7 + 10)) txt(g, x + w / 2, y0 + h / 2 + 4, label, { 'text-anchor': 'middle', 'font-size': small ? 11 : 12.5, fill: C.ink });
+    x += w;
+  };
+  if (t < READ) {
+    block(cur, '#e3eefb', C.blue, 'read_csv at work');
+  } else {
+    const table = t >= REVENUE ? 871 : 887;
+    block(table, C.blueFill, C.blue, `orders: ${table} MiB`);
+    const done = MONTHS.filter(m => t >= m).length;
+    for (let k = 0; k < done; k++) block(80, C.orangeFill, C.orange, String(k + 1), true);
+    const other = Math.max(0, cur - table - 80 * done);
+    block(other, C.grayFill, C.axis, 'everything else');
+    if (done) txt(g, x0 + table * px + 40 * done * px, y0 + h + 18, `${done} monthly table${done > 1 ? 's' : ''}, about 80 MiB each`, { 'text-anchor': 'middle', 'font-size': 12 });
+  }
+  if (t >= D.kill - 1e-6) {
+    const w = 80 * px;
+    box(g, x0 + W, y0, w, h, '#fbeceb', C.bad, { rx: 2, 'stroke-dasharray': '4 3' });
+    txt(g, x0 + W + w / 2, y0 + h / 2 + 4, '12', { 'text-anchor': 'middle', 'font-size': 11, fill: C.bad });
+    txt(g, x0 + W, y0 + h + 36, 'December does not fit: SIGKILL', { 'text-anchor': 'end', 'font-size': 13, fill: C.bad, 'font-weight': 'bold' });
+  }
+  const rss = interp(D.t, D.rss, Math.min(t, D.kill));
+  txt(g, x0, y0 + h + 36, `in use (memory.current): ${fmt(cur)} MiB    (RSS of report.py: ${fmt(rss)} MiB)`, { 'font-size': 13, fill: C.ink });
+  txt(g, x0, 160, 'Everything else: Python, pandas, temporary memory and a few MiB of page cache.', { 'font-size': 11.5, fill: C.muted });
+}
+
+function drawTee(tt) {
+  $('schemaTitle').innerHTML = 'The same run, with its output going through a pipe to <code>tee</code>';
+  const killed = tt >= 3;
+  box(g, 20, 20, 260, 120, '#fff', killed ? C.bad : C.ink2, killed ? { 'stroke-dasharray': '5 4' } : {});
+  txt(g, 34, 42, 'python3 steps/report.py', { 'font-size': 13, fill: C.ink, 'font-family': 'Menlo, Consolas, monospace' });
+  box(g, 34, 56, 232, 60, C.panel, C.axis);
+  txt(g, 44, 74, 'output buffer', { 'font-size': 11.5, fill: C.ink2 });
+  if (tt >= 0.8 && tt < 3.6) txt(g, 44, 98, 'report: loaded 8,400,000 orders …', { 'font-size': 11.5, fill: C.ink, 'font-family': 'Menlo, Consolas, monospace' });
+  if (killed) txt(g, 150, 160, 'SIGKILL: the process and its buffer are gone', { 'text-anchor': 'middle', 'font-size': 12.5, fill: C.bad, 'font-weight': 'bold' });
+  arrow(g, 282, 80, 372, 80, C.ink2);
+  txt(g, 327, 72, 'pipe', { 'text-anchor': 'middle', 'font-size': 12 });
+  txt(g, 327, 98, 'empty', { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.muted });
+  box(g, 376, 56, 90, 48, '#fff', C.ink2);
+  txt(g, 421, 85, 'tee', { 'text-anchor': 'middle', 'font-size': 13, fill: C.ink, 'font-family': 'Menlo, Consolas, monospace' });
+  arrow(g, 468, 70, 556, 44, C.ink2); arrow(g, 468, 92, 556, 118, C.ink2);
+  box(g, 560, 24, 180, 40, '#fff', C.axis); txt(g, 650, 49, 'terminal', { 'text-anchor': 'middle', 'font-size': 12.5 });
+  box(g, 560, 98, 180, 40, '#fff', C.axis); txt(g, 650, 123, '/tmp/report.log', { 'text-anchor': 'middle', 'font-size': 12.5, 'font-family': 'Menlo, Consolas, monospace' });
+  if (tt >= 4) txt(g, 650, 156, 'empty: 0 bytes', { 'text-anchor': 'middle', 'font-size': 12.5, fill: C.bad });
+}
+
+function terminal(t, k) {
+  let lines;
+  if (k < 4) {
+    lines = ['<span class="p">$</span> python3 steps/report.py'];
+    if (t >= READ) lines.push('report: loaded 8,400,000 orders (887 MiB)');
+    if (t >= D.end - 1e-6) lines.push('Killed', '<span class="p">$</span> echo $?', '137', '<span class="p">$</span> cat /sys/fs/cgroup/memory.events',
+      ...Object.entries(D.events).map(([key, v]) => `${key} ${v}`));
+  } else {
+    const tt = t - D.end;
+    lines = ['<span class="p">$</span> python3 steps/report.py | tee /tmp/report.log'];
+    if (tt >= 4) lines.push('<span class="p">$</span> echo ${PIPESTATUS[@]}', '137 0');
+    if (tt >= 5) lines.push('<span class="p">$</span> cat /tmp/report.log', '<span class="p">$</span>');
+  }
+  $('term').innerHTML = lines.join('\n');
+}
+
+Explainer({
+  stages, speed: 1,
+  clock: (t, s) => s === stages[4] ? 'after the run' : `t = ${Math.min(t, D.end).toFixed(2)} s`,
+  draw(t, k) {
+    chart.update(Math.min(t, D.end));
+    g.innerHTML = '';
+    if (k < 4) drawContainer(t); else drawTee(t - D.end);
+    terminal(t, k);
+  },
+});
+
+</script>
+</body>
+</html>

@@ -13,3 +13,13 @@ Material for the Operating Systems and Parallel Computing course: the interactiv
 - [Waiting in the Slurm queue](https://mturilli.github.io/ospc-materials/animations/slurm-queue.html): jobs arrive, wait and start on a small partition. See why a job that asks for the CPUs it uses, with an honest time limit, starts sooner and lets other jobs start sooner too.
 
 Each animation is a single HTML file with no dependencies. Open the link, or download the file and open it in a browser. It also works offline.
+
+## Lab 1: The Nightly Report
+
+What went wrong in the three tasks we did together in class, step by step. At each step, predict what happens, then watch.
+
+- [Task 1: Where the Memory Went](https://mturilli.github.io/ospc-materials/lab1/where-the-memory-went.html): a replay of `report.py` on the whole file. See how the memory grows from reading the file to the monthly tables, why the kernel kills the process instead of Python raising an error, and where the missing line of the log went.
+- [Task 2: Where grep Looked](https://mturilli.github.io/ospc-materials/lab1/where-grep-looked.html): `extracts.sh` one line at a time. See which file the relative path names after `cd`, where the error message of `grep` goes, and why the script still prints `done` and exits with status 0.
+- [Task 3: Three System Calls per Order](https://mturilli.github.io/ospc-materials/lab1/three-system-calls-per-order.html): what `audit.py` asks the kernel to do for every order, and what it costs on 8.4 million orders. See where each line is when `close` returns, and how many `write` calls one open file needs.
+
+Like the animations, each page is a single HTML file with no dependencies, and it works offline.

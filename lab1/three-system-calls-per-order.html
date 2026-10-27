@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 3: Three System Calls per Order</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --axis: #c3c2b7; --grid: #e1e0d9;
+  --surface: #ffffff; --panel: #f7f6f2; --accent: #eb6834; --blue: #2a78d6; --good: #1baf7a; --bad: #c4352b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 15px/1.5 Arial, Helvetica, sans-serif; }
+code, .mono { font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 13px; }
+header { padding: 18px 24px 6px; }
+header .kicker { color: var(--ink-2); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+header h1 { margin: 2px 0 2px; font-size: 26px; }
+header p { margin: 0; color: var(--ink-2); max-width: 900px; }
+.layout { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 12px 24px 30px; align-items: start; }
+.side { position: sticky; top: 10px; }
+.steps { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: step; }
+.steps li { counter-increment: step; padding: 6px 10px 6px 38px; position: relative; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.steps li::before { content: counter(step); position: absolute; left: 8px; top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--axis); text-align: center; line-height: 20px; font-size: 12px; color: var(--ink-2); background: #fff; }
+.steps li.done::before { background: var(--panel); border-color: var(--ink-2); }
+.steps li.on { background: var(--panel); color: var(--ink); font-weight: bold; }
+.steps li.on::before { border-color: var(--ink); color: var(--ink); }
+.card { background: var(--panel); border-radius: 10px; padding: 14px 16px; }
+.card h2 { margin: 0 0 6px; font-size: 18px; }
+.card .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin: 10px 0 4px; }
+.card p { margin: 6px 0; }
+.options { display: grid; gap: 6px; margin: 6px 0; }
+.options button { text-align: left; font: inherit; padding: 7px 10px; border-radius: 6px; border: 1.5px solid var(--axis); background: #fff; cursor: pointer; }
+.options button:hover:not(:disabled) { border-color: var(--ink-2); }
+.options button.chosen { border-color: var(--ink); }
+.options button.right { border-color: var(--good); background: #eaf7f1; }
+.options button.wrong { border-color: var(--bad); background: #fbeceb; }
+.options button:disabled { cursor: default; color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.actions button, .transport button, .transport select { font: inherit; border: 1px solid var(--axis); background: #fff; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.actions button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+.actions button:disabled { opacity: .45; cursor: default; }
+.verdict { font-weight: bold; }
+.verdict.right { color: #12784f; } .verdict.wrong { color: var(--bad); }
+.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.transport .clock { font-family: Menlo, Consolas, monospace; font-size: 17px; margin-left: 10px; }
+.transport .note { color: var(--ink-2); font-size: 13px; }
+.scrub { width: 100%; height: 30px; display: block; cursor: pointer; touch-action: none; margin-bottom: 8px; }
+.visual svg { display: block; max-width: 100%; height: auto; }
+.visual h3 { font-size: 14px; font-weight: normal; color: var(--ink-2); margin: 8px 0 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); font-size: 12.5px; margin: 2px 0; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.line { height: 3px; } .sw.dash { height: 0; border-top: 2px dashed var(--ink-2); border-radius: 0; }
+.term { background: #1d1d1b; color: #e9e8e2; font-family: Menlo, Consolas, monospace; font-size: 12.5px; border-radius: 8px;
+  padding: 10px 12px; min-height: 92px; white-space: pre-wrap; margin-top: 10px; }
+.term .p { color: #9fd3a8; }
+footer { color: var(--muted); font-size: 12.5px; padding: 0 24px 24px; max-width: 1000px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; padding: 10px 16px 24px; }
+  header, footer { padding-left: 16px; padding-right: 16px; }
+  .side { position: static; }
+}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Lab 1 · The Nightly Report</div>
+  <h1>Task 3: Three System Calls per Order</h1>
+  <p>What <code>steps/audit.py</code> asks the kernel to do for every order, and what it costs on the whole file. At each step, predict what happens, then watch.</p>
+</header>
+<div class="layout">
+  <aside class="side">
+    <ol class="steps" id="steps"></ol>
+    <div class="card" id="card"></div>
+  </aside>
+  <main class="visual">
+    <div class="transport">
+      <button id="play">&#9654; Play</button>
+      <button id="restart">&#8634; Start of the step</button>
+      <label class="note">Speed <select id="speed"></select></label>
+      <span class="clock" id="clock"></span>
+    </div>
+    <svg class="scrub" id="scrub"></svg>
+    <div id="visual"></div>
+  </main>
+</div>
+<footer>Recorded with <code>tools/record.py</code> in the course container on a Mac (Docker VM with 4 CPUs and 4 GiB; container limit 2 GiB, no swap), 19 October 2026. Your laptop gives different times. The system calls of the sample come from <code>strace -c</code>.</footer>
+<script>
+const DATA = {"t":[0.0,0.255,0.505,0.75,1.003,1.255,1.5,1.755,2.005,2.255,2.505,2.755,3.005,3.25,3.504,3.755,4.005,4.251,4.502,4.755,5.005,5.255,5.505,5.755,6.005,6.255,6.505,6.755,7.005,7.251,7.504,7.755,8.005,8.253,8.505,8.755,9.0,9.253,9.501,9.755,10.0,10.255,10.505,10.755,11.005,11.255,11.505,11.75,12.001,12.25,12.502,12.752,13.003,13.252,13.505,13.754,14.005,14.255,14.505,14.755,15.005,15.251,15.503,15.755,16.005,16.255,16.505,16.755,17.005,17.255,17.505,17.755,18.005,18.255,18.501,18.755,19.001,19.255,19.5,19.752,20.003,20.255,20.5,20.751,21.002,21.255,21.505,21.755,22.0,22.255,22.505,22.755,23.005,23.255,23.503,23.751,24.005,24.252,24.505,24.755,25.005,25.255,25.503,25.753,26.005,26.255,26.505,26.751,27.002,27.252,27.505,27.755,28.005,28.253,28.505,28.755,29.001,29.255,29.505,29.75,30.005,30.255,30.505,30.755,31.005,31.25,31.505,31.755,32.005,32.255,32.503,32.751,33.005,33.255,33.502,33.753,34.001,34.252,34.504,34.755,35.002,35.254,35.503,35.754,36.004,36.255,36.5,36.753,37.003,37.254,37.504,37.752,38.004,38.255,38.502,38.755,39.005,39.251,39.503,39.754,40.005,40.255,40.5,40.755,41.005,41.255,41.505,41.75,42.005,42.254,42.505,42.755,43.005,43.255,43.505,43.755,44.005,44.253,44.505,44.75,45.004,45.255,45.501,45.755,46.005,46.255,46.505,46.755,47.005,47.253,47.504,47.755,48.005,48.255,48.5,48.755,49.002,49.251,49.503,49.753,50.004,50.251,50.505,50.754,51.0,51.251,51.505,51.755,52.005,52.253,52.501,52.755,53.004,53.25,53.503,53.753,54.0,54.253,54.5,54.75,55.004,55.252,55.503,55.753,56.004,56.252,56.503,56.754,57.004,57.255,57.501,57.752,58.004,58.251,58.503,58.754,59.001,59.251,59.501,59.751,60.001,60.252,60.501,60.751,61.0,61.251,61.504,61.753,62.004,62.25,62.504,62.753,63.001,63.252,63.502,63.754,64.001,64.255,64.502,64.755,65.003,65.253,65.505,65.755,66.004,66.25,66.5,66.755,67.001,67.253,67.504,67.751,68.0,68.255,68.5,68.754,69.001,69.254,69.5,69.751,70.005,70.252,70.501,70.754,71.001,71.255,71.502,71.754,72.0,72.254,72.5,72.75,73.002,73.252,73.5,73.755,74.001,74.255,74.505,74.754,75.0,75.255,75.505,75.75],"cpuUser":[0,1.49,1.267,0.788,0.863,0.867,0.905,0.96,0.945,0.96,0.96,0.96,0.96,0.929,0.922,0.953,0.951,0.746,0.704,0.844,0.732,0.66,0.66,0.62,0.6,0.62,0.6,0.6,0.6,0.605,0.621,0.622,0.622,0.602,0.62,0.639,0.606,0.622,0.6,0.571,0.621,0.6,0.597,0.66,0.66,0.62,0.6,0.606,0.605,0.62,0.665,0.644,0.603,0.58,0.644,0.643,0.6,0.644,0.66,0.62,0.62,0.625,0.602,0.643,0.618,0.6,0.64,0.62,0.62,0.62,0.62,0.62,0.6,0.6,0.645,0.64,0.6,0.62,0.621,0.624,0.597,0.622,0.624,0.645,0.649,0.637,0.644,0.64,0.646,0.64,0.6,0.64,0.66,0.64,0.622,0.605,0.593,0.604,0.64,0.6,0.62,0.64,0.643,0.643,0.64,0.639,0.6,0.625,0.624,0.643,0.644,0.639,0.68,0.663,0.62,0.6,0.625,0.62,0.6,0.606,0.62,0.615,0.62,0.64,0.64,0.626,0.64,0.621,0.595,0.578,0.622,0.645,0.662,0.667,0.624,0.622,0.661,0.661,0.621,0.622,0.643,0.601,0.603,0.6,0.624,0.644,0.645,0.663,0.668,0.622,0.643,0.663,0.64,0.618,0.643,0.66,0.596,0.645,0.663,0.642,0.644,0.644,0.626,0.62,0.622,0.62,0.64,0.667,0.64,0.624,0.66,0.6,0.56,0.62,0.64,0.6,0.62,0.622,0.6,0.624,0.641,0.644,0.624,0.62,0.622,0.64,0.64,0.62,0.62,0.622,0.601,0.622,0.617,0.6,0.606,0.6,0.559,0.605,0.644,0.621,0.619,0.643,0.637,0.668,0.667,0.624,0.621,0.554,0.56,0.602,0.625,0.622,0.622,0.606,0.641,0.665,0.644,0.62,0.62,0.644,0.64,0.644,0.641,0.6,0.621,0.661,0.621,0.643,0.643,0.619,0.584,0.604,0.619,0.621,0.621,0.601,0.622,0.604,0.6,0.62,0.6,0.626,0.6,0.581,0.621,0.64,0.64,0.625,0.6,0.604,0.6,0.625,0.584,0.581,0.58,0.601,0.621,0.615,0.604,0.62,0.67,0.622,0.622,0.639,0.641,0.606,0.585,0.575,0.626,0.663,0.624,0.622,0.665,0.622,0.6,0.641,0.644,0.66,0.661,0.644,0.615,0.604,0.645,0.643,0.62,0.615,0.626,0.621,0.602,0.6,0.62,0.605,0.576,0.576,0.622,0.593,0.649,0.62,0.644,0.621,0.606,0.64,0.599,0.606],"cpuSys":[0,0.078,0.111,0.101,0.06,0.067,0.06,0.04,0.044,0.06,0.06,0.04,0.04,0.04,0.06,0.044,0.066,0.262,0.262,0.156,0.266,0.34,0.34,0.38,0.4,0.38,0.4,0.4,0.4,0.383,0.381,0.378,0.378,0.402,0.4,0.374,0.364,0.382,0.378,0.418,0.401,0.4,0.398,0.34,0.34,0.38,0.4,0.404,0.403,0.36,0.333,0.356,0.402,0.42,0.378,0.355,0.38,0.356,0.34,0.38,0.38,0.383,0.382,0.355,0.397,0.4,0.36,0.38,0.38,0.38,0.38,0.38,0.4,0.4,0.343,0.36,0.42,0.38,0.361,0.362,0.398,0.378,0.362,0.363,0.358,0.352,0.356,0.36,0.343,0.36,0.4,0.36,0.34,0.36,0.382,0.383,0.396,0.38,0.36,0.4,0.38,0.36,0.361,0.361,0.353,0.374,0.4,0.383,0.362,0.355,0.356,0.374,0.32,0.321,0.38,0.4,0.383,0.38,0.4,0.384,0.38,0.396,0.38,0.36,0.36,0.364,0.36,0.377,0.419,0.422,0.382,0.363,0.331,0.333,0.362,0.382,0.361,0.341,0.377,0.378,0.361,0.381,0.402,0.42,0.401,0.356,0.363,0.341,0.334,0.378,0.355,0.321,0.34,0.375,0.361,0.36,0.375,0.363,0.361,0.376,0.356,0.356,0.384,0.38,0.378,0.38,0.36,0.323,0.36,0.379,0.34,0.4,0.44,0.38,0.36,0.38,0.38,0.402,0.4,0.382,0.361,0.333,0.362,0.4,0.378,0.36,0.36,0.38,0.38,0.382,0.381,0.378,0.396,0.4,0.384,0.4,0.425,0.383,0.378,0.377,0.376,0.341,0.352,0.356,0.364,0.362,0.377,0.421,0.42,0.402,0.383,0.378,0.378,0.384,0.341,0.333,0.362,0.36,0.38,0.382,0.375,0.356,0.361,0.4,0.377,0.341,0.361,0.355,0.355,0.398,0.423,0.382,0.376,0.401,0.381,0.401,0.402,0.382,0.38,0.38,0.42,0.38,0.38,0.421,0.381,0.36,0.375,0.379,0.4,0.402,0.38,0.402,0.423,0.401,0.402,0.379,0.381,0.374,0.38,0.4,0.357,0.361,0.356,0.374,0.381,0.384,0.403,0.398,0.38,0.361,0.356,0.361,0.343,0.378,0.4,0.341,0.356,0.36,0.341,0.342,0.374,0.38,0.383,0.377,0.38,0.396,0.358,0.361,0.402,0.42,0.38,0.383,0.421,0.421,0.382,0.374,0.358,0.4,0.378,0.361,0.384,0.375,0.377,0.384],"wps":[0,267,351,317,269,298,143,0,0,0,0,0,0,0,0,0,0,0,4,11893,77982,119790,120496,121604,122610,123742,124298,122962,121408,121663,123667,122362,120962,121042,122288,122681,119869,113560,115987,117835,117607,118582,118759,117660,121120,123346,123250,120836,113534,109924,110787,112096,111069,111640,116340,119809,120828,120453,120752,122656,123610,122819,116267,111849,116287,116518,116306,116662,118550,118670,118218,118576,118832,119232,119038,117768,117252,117734,117874,118113,117958,115453,116215,118038,118680,118585,118684,119408,121592,123156,123151,120792,118542,119436,120267,120065,118868,118472,118700,117031,119536,122738,123444,123974,120298,118932,121830,121282,118913,118530,119047,119258,119084,120584,123570,123269,121250,121020,122998,123390,122776,123013,123310,120906,119792,116964,117338,117151,109247,103202,109534,114387,117166,119911,120024,116580,114605,115048,119044,122784,123034,110365,103759,116594,122795,120996,117325,110426,107198,109687,112169,108434,107922,116792,117729,116368,116969,112823,111191,116675,115851,116869,118483,118630,116673,114866,117318,120384,120156,118256,116226,116860,117810,117704,118158,119268,119424,118677,118840,120763,119216,115647,116207,116920,117500,118170,118220,118532,120394,121110,120814,121933,122048,121358,121321,121718,121689,119026,117513,117967,118020,117725,118031,117374,118465,120354,118517,117494,113926,111402,111145,109580,110122,110305,110411,110927,111002,110030,112126,117356,119691,118049,114142,111456,110898,108485,109461,110907,111133,115308,118487,115207,113272,114058,114914,115263,114054,112515,112666,115084,115774,115971,116018,116717,117479,118056,119466,120125,120766,120648,120554,120900,120785,121293,121692,121519,122335,122031,122045,121462,120212,120253,121324,122004,121499,121400,122528,121051,119888,120028,119967,120022,120179,120400,119504,119551,117476,115820,118972,121006,121218,121260,121411,121395,121194,122026,123134,121222,118990,118922,119406,120137,119113,117486,117982,118407,120535,120328,120449,120633,120939,121834,122326,121949],"writes":[0,68,158,225,292,363,363,363,363,363,363,363,363,363,363,363,363,363,365,5717,35535,65612,95783,126414,157088,188285,219237,249766,279941,310111,341651,371948,401993,432227,463137,493759,522472,550312,579902,609679,638588,668970,698125,727800,758685,789473,820310,849287,876623,904249,932043,960346,987822,1016166,1046058,1076049,1106472,1136414,1166848,1197742,1228653,1258660,1286554,1315651,1344734,1373910,1402887,1432241,1462162,1491576,1521271,1550864,1580687,1610480,1639730,1669364,1698356,1728231,1757175,1786933,1816503,1845238,1874262,1903785,1933679,1963634,1993325,2023338,2053513,2084916,2115706,2145312,2174977,2205030,2234870,2264582,2294583,2324092,2353933,2383182,2413701,2444551,2475176,2506290,2535849,2566020,2596764,2626176,2655864,2685552,2715703,2745547,2775245,2805598,2837030,2867619,2897170,2928129,2958964,2989207,3020352,3051263,3082007,3111716,3141903,3169613,3200572,3228899,3255129,3280952,3309677,3337688,3367849,3398168,3427501,3456225,3484689,3513634,3544253,3575194,3605524,3630266,3657708,3688563,3719249,3749249,3777442,3804241,3831487,3859124,3887397,3913124,3941358,3971330,3999987,4029514,4058824,4085474,4114197,4143755,4172410,4202148,4231059,4261463,4290120,4318896,4348779,4378486,4408857,4437922,4466970,4496350,4525875,4555202,4584954,4614836,4644666,4673937,4704086,4733956,4763575,4792579,4821330,4851039,4880513,4910124,4939623,4969390,4999820,5029703,5060106,5090808,5121258,5151487,5181312,5212346,5242334,5271383,5301064,5330619,5360213,5389246,5419355,5448375,5477995,5508191,5538040,5567378,5595003,5622856,5650131,5678013,5705482,5732614,5760577,5788453,5815745,5843468,5871808,5901794,5932143,5961121,5989100,6017063,6044472,6071197,6099093,6126892,6154684,6184270,6213572,6241528,6270359,6298443,6327701,6356338,6384500,6412258,6440833,6469800,6498720,6527875,6556729,6586117,6615351,6645145,6675350,6705368,6735733,6765330,6796010,6826038,6856040,6886563,6916955,6947772,6978000,7008946,7039093,7069677,7099386,7129563,7160208,7190743,7220836,7250836,7281610,7312115,7341707,7371889,7402013,7431660,7461622,7492328,7521374,7551984,7580338,7609894,7639705,7670034,7700899,7730816,7761119,7791774,7821716,7852871,7883365,7913361,7942622,7972822,8002325,8032410,8062191,8091532,8120946,8151182,8180940,8211346,8241508,8271542,8301373,8332619,8363160,8392984],"bytes":[0,1806812,3666994,6193308,9427429,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11284129,11354561,11453141,12034271,12624670,13216972,13843908,14477048,15120630,15759270,16389642,17012849,17635545,18286370,18911538,19531242,20154808,20792659,21424728,22017382,22591653,23202240,23816898,24413706,25040942,25642746,26254992,26892337,27527728,28163959,28762107,29326281,29895888,30469535,31053326,31620257,32221070,32867430,33516538,34174489,34822329,35480667,36148820,36817520,37466828,38070301,38700175,39329324,39960651,40587544,41222519,41869751,42505953,43148336,43788329,44433213,45077866,45710927,46352253,46979539,47626310,48252504,48896131,49535865,50157710,50785726,51424512,52071210,52719276,53361636,54011123,54663828,55343124,56009586,56650282,57292379,57942588,58588403,59231740,59880881,60519261,61165254,61798410,62459112,63126761,63789265,64462426,65102149,65754928,66420243,67056727,67698942,68341033,68993705,69639294,70282057,70938966,71618922,72280600,72920130,73590004,74257368,74911379,75585295,76254100,76919184,77562426,78215566,78815003,79484627,80097778,80665359,81224068,81845582,82451431,83103537,83759679,84394130,85015367,85631163,86257023,86919301,87588773,88245164,88780676,89374435,90041769,90705236,91354219,91964248,92544116,93133338,93731170,94343054,94899908,95510832,96159203,96779280,97418334,98052503,98628997,99250383,99890149,100510341,101154068,101779167,102437075,103056942,103679802,104326282,104968973,105626015,106254595,106883136,107518851,108157663,108792383,109435903,110082451,110727839,111361416,112013522,112659620,113300327,113927871,114550065,115192739,115830229,116470767,117109250,117753596,118411678,119058326,119716217,120380495,121039388,121693481,122338862,123010312,123659264,124287752,124930414,125570064,126210341,126838469,127489838,128117919,128758991,129412099,130057911,130692734,131290920,131893837,132484301,133087851,133681913,134268990,134873985,135477074,136067806,136667137,137280262,137929472,138585962,139212589,139817707,140422430,141015855,141594032,142197485,142799240,143400409,144040457,144674885,145280057,145903736,146511370,147144293,147763852,148373514,148974089,149592188,150219070,150844847,151475695,152099869,152735809,153368118,154013111,154666714,155316207,155972930,156613268,157277327,157927191,158576089,159236464,159893889,160560384,161214507,161883991,162536096,163197562,163840317,164493260,165156270,165817153,166467888,167116898,167782471,168442486,169082472,169735201,170386797,171027980,171676275,172340909,172969078,173631284,174244805,174884326,175529529,176185414,176853261,177501005,178156683,178819913,179467599,180141545,180801274,181450187,182083519,182736804,183375060,184025930,184670673,185305688,185942213,186596720,187240870,187898458,188551122,189201309,189846781,190523052,191183746,191829244],"end":75.95,"loopStart":4.755,"rate":118759,"user":48.8,"system":27.17,"elapsed":75.96,"totalWrites":8400366};
+'use strict';
+// Shared by the three explainers: the stages (predict, observe, explain), the transport, and SVG helpers.
+const NS = 'http://www.w3.org/2000/svg';
+const C = { ink: '#0b0b0b', ink2: '#52514e', muted: '#898781', axis: '#c3c2b7', grid: '#e1e0d9', panel: '#f7f6f2',
+  blue: '#2a78d6', orange: '#eb6834', green: '#1baf7a', yellow: '#eda100', pink: '#e87ba4', bad: '#c4352b',
+  blueFill: '#cde2fb', orangeFill: '#fbd9c9', greenFill: '#c9eedd', grayFill: '#e9e8e2', yellowFill: '#f6eec4' };
+const $ = id => document.getElementById(id);
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, attrs = {}) {
+  const t = el('text', Object.assign({ x, y, 'font-size': 13, fill: C.ink2, 'font-family': 'Arial, Helvetica, sans-serif' }, attrs), parent);
+  t.textContent = s;
+  return t;
+}
+function box(parent, x, y, w, h, fill, stroke, attrs = {}) {
+  return el('rect', Object.assign({ x, y, width: Math.max(0, w), height: Math.max(0, h), rx: 5, fill, stroke: stroke || 'none', 'stroke-width': 1.5 }, attrs), parent);
+}
+function arrow(parent, x1, y1, x2, y2, color, attrs = {}) {
+  const id = 'ah' + color.replace('#', '');
+  if (!document.getElementById(id)) {
+    // Arrowheads live in a hidden SVG of their own, so that redrawing a picture never removes them.
+    let host = document.getElementById('markers');
+    if (!host) { host = el('svg', { id: 'markers', width: 0, height: 0, style: 'position:absolute' }, document.body); el('defs', {}, host); }
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, host.firstChild);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }, m);
+  }
+  return el('line', Object.assign({ x1, y1, x2, y2, stroke: color, 'stroke-width': 2, 'marker-end': `url(#${id})` }, attrs), parent);
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = f => clamp(f, 0, 1);
+function interp(ts, vs, t) {
+  if (t <= ts[0]) return vs[0];
+  for (let k = 1; k < ts.length; k++) if (ts[k] >= t) {
+    const f = (t - ts[k - 1]) / ((ts[k] - ts[k - 1]) || 1);
+    return vs[k - 1] + (vs[k] - vs[k - 1]) * f;
+  }
+  return vs[vs.length - 1];
+}
+const fmt = n => Math.round(n).toLocaleString('en-US');
+let clipCount = 0;
+
+// A chart over time that is drawn up to the playhead, so that it grows as the replay plays.
+function timeChart(host, o) {
+  const W = o.width || 760, H = o.height || 200, m = { l: 74, r: 18, t: 10, b: 26 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const x = t => m.l + pw * clamp((t - o.t0) / (o.t1 - o.t0), 0, 1);
+  const y = v => m.t + ph * (1 - clamp(v / o.ymax, 0, 1));
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, host);
+  for (const b of o.bands || []) {
+    el('rect', { x: x(b.t0), y: m.t, width: x(b.t1) - x(b.t0), height: ph, fill: b.fill || C.panel }, svg);
+    if (b.label) txt(svg, (x(b.t0) + x(b.t1)) / 2, m.t + ph - 8, b.label, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.ink2 });
+  }
+  for (const v of o.yticks || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: C.grid }, svg);
+    txt(svg, m.l - 8, y(v) + 4, o.yfmt(v), { 'text-anchor': 'end', 'font-size': 12 });
+  }
+  for (const s of o.xticks || []) {
+    txt(svg, x(s), H - 6, o.xfmt ? o.xfmt(s) : `${s} s`, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.muted });
+  }
+  el('line', { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: C.axis }, svg);
+  const cid = `clip${++clipCount}`;
+  const clip = el('rect', { x: m.l, y: 0, width: 0, height: H }, el('clipPath', { id: cid }, el('defs', {}, svg)));
+  const g = el('g', { 'clip-path': `url(#${cid})` }, svg);
+  for (const s of o.series) {
+    if (s.kind === 'area') {
+      let d = '';
+      s.t.forEach((t, k) => { d += `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`; });
+      for (let k = s.t.length - 1; k >= 0; k--) d += `L${x(s.t[k]).toFixed(1)},${y(s.base ? s.base[k] : 0).toFixed(1)}`;
+      el('path', { d: d + 'Z', fill: s.color, 'fill-opacity': 0.85, stroke: '#fff', 'stroke-width': 0.8 }, g);
+    } else {
+      const d = s.t.map((t, k) => `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`).join('');
+      el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.2, 'stroke-linejoin': 'round' }, g);
+    }
+  }
+  for (const h of o.hlines || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(h.v), y2: y(h.v), stroke: C.ink2, 'stroke-width': 1.5, 'stroke-dasharray': '6 4' }, svg);
+    if (h.label) txt(svg, m.l + pw - 4, y(h.v) - 6, h.label, { 'text-anchor': 'end', 'font-size': 12, fill: C.ink2 });
+  }
+  const marks = (o.marks || []).map(mk => {
+    const gm = el('g', { visibility: 'hidden' }, svg);
+    el('line', { x1: x(mk.t), x2: x(mk.t), y1: y(mk.v) - 9, y2: y(mk.v) + 9, stroke: C.orange, 'stroke-width': 2 }, gm);
+    if (mk.label) txt(gm, x(mk.t), y(mk.v) - 13, mk.label, { 'text-anchor': 'middle', 'font-size': 11, fill: C.ink2 });
+    return [mk.t, gm];
+  });
+  const head = el('line', { y1: m.t, y2: m.t + ph, stroke: C.ink, 'stroke-width': 1.5 }, svg);
+  return {
+    update(t) {
+      clip.setAttribute('width', Math.max(0, x(t) - m.l + 1));
+      head.setAttribute('x1', x(t)); head.setAttribute('x2', x(t));
+      head.setAttribute('visibility', t >= o.t0 && t <= o.t1 + 1e-9 ? 'visible' : 'hidden');
+      for (const [mt, gm] of marks) gm.setAttribute('visibility', t >= mt ? 'visible' : 'hidden');
+    },
+  };
+}
+function legendHtml(items) {
+  return '<div class="legend">' + items.map(it => `<span><i class="sw ${it.kind || ''}" ${it.color ? `style="background:${it.color}"` : ''}></i>${it.name}</span>`).join('') + '</div>';
+}
+
+// The stages: each one asks for a prediction, plays its part of the replay at constant speed, then explains.
+function Explainer(cfg) {
+  const S = { k: 0, T: cfg.stages[0].t0, playing: false, last: null, speed: cfg.speed || 1,
+    chosen: cfg.stages.map(() => null), seen: cfg.stages.map(() => false) };
+  const END = cfg.stages[cfg.stages.length - 1].t1;
+  const stageAt = t => { for (let k = cfg.stages.length - 1; k >= 0; k--) if (t >= cfg.stages[k].t0 - 1e-9) return k; return 0; };
+
+  $('steps').innerHTML = cfg.stages.map((s, k) => `<li data-k="${k}">${s.title}</li>`).join('');
+  $('steps').addEventListener('click', e => { const li = e.target.closest('li'); if (li) go(+li.dataset.k); });
+  $('speed').innerHTML = [0.25, 0.5, 1, 2, 5, 10].map(v => `<option value="${v}" ${v === S.speed ? 'selected' : ''}>${v}&times;</option>`).join('');
+  $('speed').onchange = e => { S.speed = +e.target.value; };
+  $('play').onclick = () => S.playing ? pause() : play();
+  $('restart').onclick = () => { pause(); seek(cfg.stages[S.k].t0); };
+
+  function card() {
+    const s = cfg.stages[S.k], ch = S.chosen[S.k], shown = S.seen[S.k];
+    const opts = s.options.map((o, i) => {
+      let cls = '';
+      if (shown) cls = i === s.answer ? 'right' : (i === ch ? 'wrong' : '');
+      else if (i === ch) cls = 'chosen';
+      return `<button data-i="${i}" class="${cls}" ${shown || ch !== null ? 'disabled' : ''}>${String.fromCharCode(65 + i)}. ${o}</button>`;
+    }).join('');
+    let verdict = '';
+    if (shown) verdict = ch === null ? '<p class="verdict">You did not predict this one.</p>'
+      : ch === s.answer ? '<p class="verdict right">Your prediction was right.</p>' : '<p class="verdict wrong">Not what happened.</p>';
+    $('card').innerHTML = `<h2>${S.k + 1}. ${s.title}</h2>` +
+      `<div class="label">Predict</div><p>${s.q}</p><div class="options">${opts}</div>` +
+      (shown ? `<div class="label">What happened</div>${verdict}${s.explain}`
+        : `<p class="note" style="color:var(--ink-2);font-size:13px">${ch === null ? 'Choose an answer, then watch.' : 'Now watch what happens.'}</p>`) +
+      `<div class="actions">` +
+      (shown ? (S.k + 1 < cfg.stages.length ? `<button class="primary" id="next">Next step</button>` : '') :
+        `<button class="primary" id="watch">${ch === null ? 'Skip the prediction and watch' : 'Watch'}</button>`) +
+      `</div>`;
+    $('card').querySelectorAll('.options button').forEach(b => b.onclick = () => {
+      S.chosen[S.k] = +b.dataset.i; seek(s.t0); card(); play();
+    });
+    const w = $('watch'); if (w) w.onclick = () => { if (S.T >= s.t1 - 1e-6) seek(s.t0); play(); };
+    const n = $('next'); if (n) n.onclick = () => go(S.k + 1);
+    [...$('steps').children].forEach((li, k) => { li.classList.toggle('on', k === S.k); li.classList.toggle('done', S.seen[k]); });
+  }
+  function go(k) { pause(); S.k = k; S.T = cfg.stages[k].t0; card(); render(); }
+  function reveal() { if (!S.seen[S.k]) { S.seen[S.k] = true; card(); } }
+  function seek(t) {
+    S.T = clamp(t, cfg.stages[0].t0, END);
+    const k = stageAt(S.T);
+    if (k !== S.k) { S.k = k; card(); }
+    if (S.T >= cfg.stages[S.k].t1 - 1e-6) reveal();
+    render();
+  }
+  function play() {
+    const s = cfg.stages[S.k];
+    if (S.T >= s.t1 - 1e-6) { if (S.k + 1 < cfg.stages.length) { go(S.k + 1); } return; }
+    S.playing = true; S.last = null; $('play').innerHTML = '&#10074;&#10074; Pause';
+    requestAnimationFrame(frame);
+  }
+  function pause() { S.playing = false; $('play').innerHTML = '&#9654; Play'; }
+  function frame(now) {
+    if (!S.playing) return;
+    const s = cfg.stages[S.k];
+    if (S.last !== null) S.T += (now - S.last) / 1000 * S.speed * (s.rate || 1);
+    S.last = now;
+    if (S.T >= s.t1) { S.T = s.t1; pause(); reveal(); render(); return; }
+    render();
+    requestAnimationFrame(frame);
+  }
+  // The timeline under the transport: one segment per step.
+  const scrub = $('scrub');
+  function drawScrub() {
+    scrub.innerHTML = '';
+    const W = scrub.clientWidth || 700, H = 30, t0 = cfg.stages[0].t0;
+    scrub.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const x = t => 6 + (W - 12) * (t - t0) / (END - t0);
+    cfg.stages.forEach((s, k) => el('rect', { x: x(s.t0) + 1, y: 11, width: Math.max(1, x(s.t1) - x(s.t0) - 2), height: 8, rx: 3, fill: k % 2 ? '#d9d8d1' : '#c9c8c0' }, scrub));
+    S.knob = el('circle', { cy: 15, r: 7, fill: C.ink, stroke: '#fff', 'stroke-width': 2 }, scrub);
+    S.sx = x;
+  }
+  let drag = false;
+  const toT = ev => { const b = scrub.getBoundingClientRect(); const t0 = cfg.stages[0].t0; return t0 + clamp((ev.clientX - b.left - 6) / (b.width - 12), 0, 1) * (END - t0); };
+  scrub.onpointerdown = ev => { drag = true; scrub.setPointerCapture(ev.pointerId); pause(); seek(toT(ev)); };
+  scrub.onpointermove = ev => { if (drag) seek(toT(ev)); };
+  scrub.onpointerup = () => { drag = false; };
+  window.addEventListener('resize', () => { drawScrub(); render(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.key === ' ') { e.preventDefault(); S.playing ? pause() : play(); }
+  });
+
+  function render() {
+    $('clock').textContent = cfg.clock(S.T, cfg.stages[S.k]);
+    if (S.knob) S.knob.setAttribute('cx', S.sx(S.T));
+    cfg.draw(S.T, S.k);
+  }
+  drawScrub(); card(); render();
+}
+
+// Task 3: the audit trail is slow. Step 2 replays a recording of audit.py on the whole file
+// (tools/record.py --io --cpu); the other steps show one order, or one page, in slow motion.
+const D = DATA;
+const REC0 = 8, RATE = 5;                      // step 2 starts at 8 s of this page and plays the recording at 5x
+const REC1 = REC0 + D.end;
+const stages = [
+  { title: 'One order', t0: 0, t1: REC0,
+    q: 'How many system calls does <code>audit.py</code> make for each order?',
+    options: ['One: <code>write</code>', 'Three: <code>openat</code>, <code>write</code> and <code>close</code>', 'None: Python collects the lines and writes them later'], answer: 1,
+    explain: `<p>Every order opens the file (<code>openat</code>), hands one line of about 20 bytes to the kernel when the
+      <code>with</code> block closes the file (<code>write</code>), and closes it (<code>close</code>). Python's file buffer
+      never holds more than that one line.</p><p><code>strace -c</code> on the sample of 100,000 orders:
+      100,683 <code>openat</code>, 100,001 <code>write</code>, 100,670 <code>close</code>. The few extra calls come from Python
+      starting and importing pandas, from the first <code>open</code> that empties the file, and from the final
+      <code>print</code>.</p>` },
+  { title: '8.4 million orders', t0: REC0, t1: REC1, rate: RATE,
+    q: 'On the whole file, which share of the CPU time does the kernel use (system time)?',
+    options: ['About 5%', 'About 35%', 'About 90%'], answer: 1,
+    explain: `<p><b>${D.user.toFixed(1)} s</b> user, <b>${D.system.toFixed(1)} s</b> system, out of ${D.elapsed.toFixed(1)} s:
+      the kernel took ${Math.round(100 * D.system / (D.user + D.system))}% of the CPU time. After reading the file, the loop makes
+      about ${fmt(D.rate / 1000)},000 <code>write</code> calls per second, and as many <code>openat</code> and <code>close</code>:
+      ${fmt(D.totalWrites)} <code>write</code> calls in all, about 23 bytes each.</p>
+      <p>Three calls per order make about 25 million system calls on the whole file, about 1 µs of kernel time each.
+      Every one crosses into the kernel and back. The user time is Python's own work for each order: the loop, the
+      formatting and a new file object at every <code>open</code>. Compare <code>report.py</code>, which works in memory
+      with few system calls: there the kernel takes about a tenth.</p>` },
+  { title: 'Saved on disk?', t0: REC1, t1: REC1 + 8,
+    q: 'The comment says the file is reopened for every order "so that each line is saved on disk". When <code>close</code> returns, where is the line?',
+    options: ['On the disk', 'In the page cache, in RAM', 'Still in Python\'s buffer'], answer: 1,
+    explain: `<p><code>write</code> copies the line into the page cache, in RAM, and marks the page dirty. <code>close</code>
+      does not change that. The kernel copies dirty pages to the disk later, in the background, usually within half a minute.
+      Only <code>os.fsync</code> makes a program wait until the disk has its data (Lecture 9, p. 25).</p>
+      <p>So reopening the file does not save each line on disk. It only hands each line to the kernel at once, at the
+      price of three system calls per order. That protects the lines from a crash of the job, because the kernel already
+      has them, but not from a crash of the machine.</p>` },
+  { title: 'One open file', t0: REC1 + 8, t1: REC1 + 16,
+    q: 'Python\'s file buffer holds 128 KiB. Writing the same 1,952,269 bytes of the sample through one open file, about how many <code>write</code> calls would Python make?',
+    options: ['About 15', 'About 1,000', 'About 100,000'], answer: 0,
+    explain: `<p>Python fills its 128 KiB buffer (131,072 bytes) and hands it to the kernel in one <code>write</code>:
+      1,952,269 / 131,072 = 14.9, so <b>15</b> calls, with one <code>openat</code> and one <code>close</code>, instead of about
+      100,000 of each.</p>` },
+];
+
+const V = $('visual');
+V.innerHTML = `<div id="diagram"></div><div id="charts"></div>`;
+const S = el('svg', { viewBox: '0 0 760 250', width: 760, height: 250 }, $('diagram'));
+const g = el('g', {}, S);
+$('charts').innerHTML = `<h3>CPU time of <code>audit.py</code>, in CPUs, averaged over 0.5 s</h3>` +
+  legendHtml([{ name: 'user', color: C.blue }, { name: 'system', color: C.orange }]) + `<div id="cpu"></div>` +
+  `<h3><code>write</code> calls per second</h3><div id="wps"></div>`;
+const tt = D.t;
+const cpuChart = timeChart($('cpu'), { width: 760, height: 150, t0: 0, t1: D.end, ymax: 1.1, yticks: [0, 0.5, 1], yfmt: v => String(v),
+  xticks: [0, 10, 20, 30, 40, 50, 60, 70],
+  series: [{ t: tt, v: D.cpuUser, color: C.blue, kind: 'area' },
+           { t: tt, v: D.cpuUser.map((u, k) => u + D.cpuSys[k]), base: D.cpuUser, color: C.orange, kind: 'area' }] });
+const wpsChart = timeChart($('wps'), { width: 760, height: 130, t0: 0, t1: D.end, ymax: 140000, yticks: [0, 50000, 100000],
+  yfmt: v => v ? `${v / 1000},000` : '0', xticks: [0, 10, 20, 30, 40, 50, 60, 70],
+  series: [{ t: tt, v: D.wps, color: C.orange }] });
+
+const mono = { 'font-family': 'Menlo, Consolas, monospace', 'font-size': 12, fill: C.ink, style: 'white-space: pre' };
+const CODE = ['for order in orders.itertuples():', '    with open(path, "a") as f:', '        f.write(f"{order.order_id},…\\n")'];
+const LINES = ['1,Iberia,416.56', '2,Iberia,22.80'];
+
+function lanes() {
+  txt(g, 10, 16, 'audit.py, in user space', { 'font-size': 12.5, fill: C.ink2 });
+  txt(g, 360, 16, 'the kernel', { 'font-size': 12.5, fill: C.ink2 });
+  txt(g, 620, 16, 'the disk', { 'font-size': 12.5, fill: C.ink2 });
+  el('line', { x1: 335, x2: 335, y1: 6, y2: 196, stroke: C.axis, 'stroke-dasharray': '4 4' }, g);
+  el('line', { x1: 600, x2: 600, y1: 6, y2: 196, stroke: C.axis, 'stroke-dasharray': '4 4' }, g);
+}
+function code(line) {
+  box(g, 10, 26, 286, 64, C.panel, 'none');
+  CODE.forEach((s, k) => {
+    if (k === line) box(g, 12, 32 + k * 18, 282, 18, '#fbe2d4', 'none', { rx: 2 });
+    txt(g, 18, 45 + k * 18, s, Object.assign({}, mono, { 'font-size': 11.5 }));
+  });
+}
+function pyBuffer(text, fill) {
+  box(g, 10, 106, 286, 40, '#fff', C.ink2);
+  txt(g, 18, 122, "Python's file buffer (128 KiB)", { 'font-size': 11.5, fill: C.ink2 });
+  if (fill !== undefined) box(g, 18, 128, 270 * fill, 12, C.blueFill, C.blue, { rx: 2, 'stroke-width': 1 });
+  if (text) txt(g, 18, 139, text, Object.assign({}, mono, { 'font-size': 11 }));
+}
+function openFiles(open) {
+  box(g, 360, 26, 220, 54, '#fff', C.ink2);
+  txt(g, 368, 42, 'open files of audit.py', { 'font-size': 11.5, fill: C.ink2 });
+  if (open) txt(g, 368, 66, open === true ? '3  →  audit_2025.csv' : open, Object.assign({}, mono, { 'font-size': 11.5 }));
+}
+function pageCache(dirty, clean, label) {
+  box(g, 360, 96, 220, 60, '#fff', C.ink2);
+  txt(g, 368, 112, 'page cache, in RAM', { 'font-size': 11.5, fill: C.ink2 });
+  const n = 12, w = 204 / n;
+  for (let k = 0; k < n; k++) {
+    const f = k < clean ? 'c' : k < clean + dirty ? 'd' : '';
+    box(g, 368 + k * w, 120, w - 3, 26, f === 'd' ? C.orangeFill : f === 'c' ? C.blueFill : '#f7f6f2', f === 'd' ? C.orange : f === 'c' ? C.blue : C.grid, { rx: 2, 'stroke-width': 1 });
+  }
+  if (label) txt(g, 368, 172, label, { 'font-size': 11.5, fill: C.ink2 });
+}
+function disk(fill, label) {
+  box(g, 620, 96, 130, 60, '#fff', C.ink2);
+  txt(g, 628, 112, 'audit_2025.csv', Object.assign({}, mono, { 'font-size': 11 }));
+  box(g, 628, 120, 114 * fill, 26, C.blueFill, C.blue, { rx: 2, 'stroke-width': 1 });
+  if (label) txt(g, 620, 172, label, { 'font-size': 11.5, fill: C.ink2 });
+}
+function call(name, y, on) {
+  arrow(g, 300, y, 356, y, on ? C.orange : C.axis, { 'stroke-width': on ? 2.5 : 1.5 });
+  if (on) txt(g, 328, y - 5, name, Object.assign({}, mono, { 'text-anchor': 'middle', 'font-size': 11, fill: C.orange }));
+}
+function counters(o, w, c, note) {
+  const items = [['openat', o], ['write', w], ['close', c]];
+  items.forEach(([n, v], k) => {
+    txt(g, 10 + k * 150, 228, n, Object.assign({}, mono, { fill: C.ink2 }));
+    txt(g, 10 + k * 150 + 56, 228, v === null ? '' : fmt(v), Object.assign({}, mono, { 'font-size': 14, 'font-weight': 'bold' }));
+  });
+  if (note) txt(g, 460, 228, note, { 'font-size': 11.5, fill: C.ink2 });
+}
+
+// Step 1: the first order slowly, then the next ones faster.
+function oneOrder(t) {
+  const first = 4.4, each = 0.6;
+  let k, p;
+  if (t < first) { k = 0; p = t; } else { k = 1 + Math.floor((t - first) / each); p = ((t - first) % each) / each * first; }
+  const line = p < 0.6 ? 0 : p < 1.8 ? 1 : p < 3.0 ? 2 : 1;
+  code(line);
+  const done = k;                                   // orders already written
+  pyBuffer(p >= 2.4 && p < 3.4 ? LINES[Math.min(k, 1)] + '\\n' : '');
+  openFiles(p >= 1.4 && p < 4.2);
+  call('openat', 44, p >= 0.8 && p < 1.4);
+  call('write', 120, p >= 3.0 && p < 3.7);
+  call('close', 78, p >= 3.7 && p < 4.2);
+  pageCache(Math.min(12, done + (p >= 3.4 ? 1 : 0)), 0, 'dirty pages: data the disk does not have yet');
+  disk(0);
+  const o = done + (p >= 1.4 ? 1 : 0), w = done + (p >= 3.4 ? 1 : 0), c = done + (p >= 4.2 ? 1 : 0);
+  counters(o, w, c, k ? `order ${k + 1}` : 'order 1');
+}
+
+// Step 2: the recording.
+function wholeFile(r) {
+  const busy = r >= D.loopStart;
+  code(busy ? Math.floor(r * 20) % 3 : -1);
+  pyBuffer('');
+  openFiles(busy ? 'reopened for every order' : '');
+  call('openat', 44, busy); call('write', 120, busy); call('close', 78, busy);
+  const bytes = interp(tt, D.bytes, r);
+  pageCache(Math.min(12, Math.round(12 * bytes / D.bytes[D.bytes.length - 1])), 0, `${(bytes / 1e6).toFixed(0)} MB written so far`);
+  disk(0, 'written in the background');
+  const w = Math.round(interp(tt, D.writes, r));
+  counters(null, w, null, busy ? 'openat and close: about as many as write' : 'reading the orders first');
+}
+
+// Step 3: what happens to a dirty page.
+function savedOnDisk(p) {
+  code(-1); pyBuffer('');
+  openFiles(false);
+  const f = ease((p - 3) / 3);
+  pageCache(f < 1 ? 12 : 0, f >= 1 ? 12 : 0, f < 1 ? 'dirty: the line is only in RAM' : 'clean: the disk has the same data');
+  if (p >= 3 && p < 6) arrow(g, 582, 126, 618, 126, C.blue, { 'stroke-width': 2.5 });
+  disk(f, p < 3 ? 'not yet' : 'written later');
+  txt(g, 360, 196, p < 3 ? 'close has returned. The program goes on.' : 'Later, the kernel copies dirty pages to the disk.', { 'font-size': 12.5, fill: C.ink });
+  counters(null, null, null, '');
+}
+
+// Step 4: one open file and a 128 KiB buffer, on the sample.
+function oneFile(p) {
+  code(2);
+  const total = 1952269, chunk = 131072, sent = Math.floor(clamp(p / 7.5, 0, 1) * total);
+  const writes = Math.min(15, Math.floor(sent / chunk) + (p >= 7.5 ? 1 : 0));
+  pyBuffer('', (sent % chunk) / chunk);
+  openFiles(true);
+  const flash = (sent % chunk) / chunk > 0.85;
+  call('write', 120, flash);
+  pageCache(Math.min(12, Math.round(12 * writes / 15)), 0, `${fmt(sent)} of 1,952,269 bytes`);
+  disk(0);
+  counters(1, writes, p >= 7.8 ? 1 : 0, 'the sample: 100,000 orders');
+}
+
+Explainer({
+  stages, speed: 1,
+  clock: (t, s) => s === stages[0] ? 'slow motion: one order takes about 9 µs'
+    : s === stages[1] ? `t = ${Math.min(t - REC0, D.end).toFixed(1)} s (played at ${RATE}× real time)` : 'slow motion',
+  draw(t, k) {
+    g.innerHTML = '';
+    lanes();
+    const r = clamp(t - REC0, 0, D.end);
+    cpuChart.update(t < REC0 ? 0 : r); wpsChart.update(t < REC0 ? 0 : r);
+    if (k === 0) oneOrder(t);
+    else if (k === 1) wholeFile(r);
+    else if (k === 2) savedOnDisk(t - REC1);
+    else oneFile(t - REC1 - 8);
+  },
+});
+
+</script>
+</body>
+</html>
