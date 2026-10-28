@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Vectorized Operations, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Vectorized Operations, Step by Step</h1>
+      <p>The same additions as a Python loop, as a compiled loop, and with SIMD instructions that handle 4 or 8 numbers at once. Measured on our cluster.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start. Click a timeline to jump to that moment.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements</h2>
+    <p><b>Where.</b> haskell, a node of our cluster (AMD EPYC 9755), one core, float64, in a 4-CPU batch job. Every time is the best of 7 runs.</p>
+    <p><b>The Python loop</b> is <code>for i in range(n): c[i] = a[i] + b[i]</code> on two lists of a million numbers: 26 ns per number (on an Apple laptop, in the course container: about 18 ns). The five boxes on the page are a simplified picture of what the interpreter does for each number.</p>
+    <p><b>The compiled loops</b> are one C loop, <code>c[i] = a[i] + b[i]</code>, compiled three ways with gcc 14: without vectorization (one number per instruction), and with 256-bit (AVX2, 4 doubles) or 512-bit (AVX-512, 8 doubles) vector instructions. NumPy's own loops use the same instructions. The multiply-add version evaluates a polynomial of degree 8 on each number.</p>
+    <p><b>In cache or from RAM.</b> In cache: 4,096 numbers, processed again and again, so they stay in the core's caches. From RAM: 10 million numbers (80 MB per array).</p>
+    <p><b>Apple laptops</b> have 128-bit vector registers (NEON): 2 doubles per instruction, but several instructions per cycle. Exercise 2 measures the Python loop and NumPy on your own laptop.</p>
+    <p>Data files: simd-haskell-25327.out and simd-haskell-25328.out (lecture12/measure/vec).</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"vectorization","n":16,"views":{"main":{"steps":[{"mode":"python","op":"add","where":"cache","per":26.067988947033882,"title":"A Python loop: one number at a time","sub":"c = a + b on 16 numbers, as for i in range(n): c[i] = a[i] + b[i]","label":"Python loop","rows":[["Way","26 ns","For each number the interpreter decodes bytecodes, follows pointers to two number objects, checks their types, adds, and creates a new object for the result.",true],["Time","417 ns","for 16 numbers. Only a tiny part of it is the addition.",true]],"t":0},{"mode":"scalar","op":"add","where":"cache","per":0.2594,"title":"A compiled loop: one number per instruction","sub":"The same additions in a compiled loop, numbers side by side in memory, data in the cache","label":"compiled","rows":[["Way","0.26 ns","One add instruction per number, with no interpreter in between.",true],["Time","4.2 ns","for 16 numbers: 100 times faster than the Python loop.",true]],"t":1},{"mode":"simd4","op":"add","where":"cache","per":0.1219,"title":"SIMD: 4 numbers per instruction (AVX2)","sub":"One instruction adds 4 pairs of numbers at once","label":"SIMD x4","rows":[["Way","0.12 ns","Each instruction loads 4 numbers of a and 4 of b, adds them, and stores 4 results.",true],["Time","2 ns","for 16 numbers: 2.1 times faster than one number per instruction.",true]],"t":2},{"mode":"simd8","op":"add","where":"cache","per":0.1219,"title":"SIMD: 8 numbers per instruction (AVX-512)","sub":"Twice as many lanes, but no faster for a + b","label":"SIMD x8","rows":[["Way","0.12 ns","Twice the lanes of AVX2, the same time per number.",true],["Why","","Each addition loads two numbers and stores one. Moving the numbers in and out of the registers, not adding them, sets the pace.",true]],"t":3},{"mode":"scalar","op":"poly","where":"cache","per":0.9877,"title":"8 multiply-adds per number, one number per instruction","sub":"A polynomial of degree 8 on each number: much more arithmetic for the same data","label":"compiled","rows":[["Way","0.99 ns","8 multiply-adds per number, one number at a time.",true],["Time","16 ns","for 16 numbers.",true]],"t":4},{"mode":"simd8","op":"poly","where":"cache","per":0.1422,"title":"8 multiply-adds per number, 8 numbers per instruction","sub":"Now the arithmetic sets the pace, and the 8 lanes pay off","label":"SIMD x8","rows":[["Way","0.14 ns","7 times faster than one number per instruction (AVX2, 4 lanes: 0.25 ns).",true],["Time","2.3 ns","for 16 numbers.",true]],"t":5},{"mode":"simd8","op":"add","where":"ram","per":0.7986,"title":"From RAM: every version waits for the data","sub":"a + b on 10 million numbers, too many for the cache","label":"from RAM","rows":[["Way","0.80 ns","8 numbers per instruction; one per instruction takes 0.81 ns, 4 per instruction 0.81 ns.",true],["Why","","One core reads about 30 GB/s from RAM. The lanes wait for the numbers: moving the data, not computing, is the limit.",true]],"t":6}]}},"dots":[{"row":0,"case":"add","v":26.067988947033882,"step":0,"text":"26 ns"},{"row":1,"case":"add","v":0.2594,"step":1,"text":"0.26 ns"},{"row":2,"case":"add","v":0.1219,"step":2,"text":"0.12 ns"},{"row":3,"case":"add","v":0.1219,"step":3,"text":"0.12 ns"},{"row":1,"case":"poly","v":0.9877,"step":4,"text":"0.99 ns"},{"row":2,"case":"poly","v":0.2473,"step":5,"text":"0.25 ns"},{"row":3,"case":"poly","v":0.1422,"step":5,"text":"0.14 ns"},{"row":1,"case":"ram","v":0.8108,"step":6,"text":"0.81 ns"},{"row":2,"case":"ram","v":0.8084,"step":6,"text":"0.81 ns"},{"row":3,"case":"ram","v":0.7986,"step":6,"text":"0.80 ns"}],"pyNs":26.067988947033882,"simd":{"scalar":{"add_small_ns":0.2594,"add_large_ns":0.8108,"poly_small_ns":0.9877,"poly_large_ns":0.9939},"avx2":{"add_small_ns":0.1219,"add_large_ns":0.8084,"poly_small_ns":0.2473,"poly_large_ns":0.8073},"avx512":{"add_small_ns":0.1219,"add_large_ns":0.7986,"poly_small_ns":0.1422,"poly_large_ns":0.8161}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Vectorized operations, step by step: t = step + progress; at a whole step the step's work is shown finished.
+const ST = DATA.views.main.steps, NS = DATA.n;
+const BLUE = "#2a78d6", ORANGE2 = "#eb6834", GREEN = "#1baf7a";
+const CASES = { add: ["a + b, in cache", BLUE], poly: ["8 multiply-adds, in cache", ORANGE2], ram: ["a + b, from RAM", GREEN] };
+const ROWS = ["Python loop", "One number per instruction", "SIMD, 4 per instruction", "SIMD, 8 per instruction"];
+const ax0 = 270, cw = 50, cg = 4;                       // arrays: x of the first cell, cell width, gap
+const ya = 150, yb = 196, yc = 312, ch = 36;            // rows a, b, c
+const GROW = 0.7;
+const cx = i => ax0 + i * (cw + cg);
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+const stepOf = t => Math.min(Math.floor(t + EPS), ST.length - 1);
+const lanes = mode => mode === "simd8" ? 8 : mode === "simd4" ? 4 : 1;
+function fmtT(x) { return x >= 100 ? `${x.toFixed(0)} ns` : x >= 10 ? `${x.toFixed(1)} ns` : `${x.toFixed(2)} ns`; }
+
+function arrays(st, g) {
+  const L = lanes(st.mode), groups = NS / L;
+  // how many numbers are done, and which ones are being worked on now
+  const done = g >= 1 ? NS : Math.floor(g * groups + EPS) * L;
+  const active = g >= 1 ? -1 : Math.floor(g * groups + EPS);
+  [["a", ya], ["b", yb], ["c", yc]].forEach(([name, y]) => text(ax0 - 24, y + ch / 2, name, { fs: 18, ha: "right", mono: true }));
+  for (let i = 0; i < NS; i++) {
+    const inAct = active >= 0 && Math.floor(i / L) === active;
+    box(cx(i), ya, cw, ch, inAct ? "#e8f1fc" : "#ffffff", inAct ? BLUE : GRID, inAct ? 2 : 1);
+    box(cx(i), yb, cw, ch, inAct ? "#e8f1fc" : "#ffffff", inAct ? BLUE : GRID, inAct ? 2 : 1);
+    box(cx(i), yc, cw, ch, i < done ? "#e9f7f1" : "#ffffff", i < done ? GREEN : GRID, i < done ? 1.5 : 1);
+    text(cx(i) + cw / 2, ya + ch / 2, `a${i}`, { fs: 11, color: INK_2, ha: "center" });
+    text(cx(i) + cw / 2, yb + ch / 2, `b${i}`, { fs: 11, color: INK_2, ha: "center" });
+    if (i < done) text(cx(i) + cw / 2, yc + ch / 2, st.op === "poly" ? `p(a${i})` : `c${i}`, { fs: 11, ha: "center" });
+  }
+  // the instruction at work: a bracket over the active numbers, with what one instruction does
+  const k = active >= 0 ? active : groups - 1;
+  const x0 = cx(k * L), x1 = cx(k * L + L - 1) + cw, ym = yb + ch + 26;
+  line(x0, ym - 8, x0, ym, { color: ORANGE, lw: 2 });
+  line(x1, ym - 8, x1, ym, { color: ORANGE, lw: 2 });
+  line(x0, ym, x1, ym, { color: ORANGE, lw: 2 });
+  let what;
+  if (st.mode === "python") what = "for this one number, the interpreter does all the steps below";
+  else if (st.op === "poly") what = L === 1 ? "8 multiply-adds on 1 number" : `8 multiply-adds on ${L} numbers at once`;
+  else what = L === 1 ? "1 instruction: 1 addition" : `1 instruction: ${L} additions`;
+  const tx = Math.min(Math.max((x0 + x1) / 2, 380), 930);
+  text(tx, ym + 18, what, { fs: 13, color: ORANGE, ha: "center" });
+  if (st.mode === "python" && active >= 0) {   // the five things the interpreter does, lit in turn
+    const parts = ["decode", "pointers", "types", "add", "new object"], sub = (g * groups) % 1;
+    parts.forEach((p, j) => {
+      const on = j <= Math.floor(sub * parts.length + EPS);
+      box(ax0 + j * 112, yc + ch + 18, 104, 26, on ? "#fdebe2" : "#ffffff", on ? ORANGE : GRID, 1, true);
+      text(ax0 + j * 112 + 52, yc + ch + 31, p, { fs: 12, color: on ? INK : MUTED, ha: "center" });
+    });
+  }
+  if (st.where === "ram") {                    // the numbers come from RAM, and the lanes wait
+    box(40, ya - 2, 150, 82, "#f3f2ee", AXIS, 1, true);
+    text(115, ya + 26, "RAM", { fs: 16, ha: "center" });
+    text(115, ya + 50, "about 30 GB/s", { fs: 12, color: INK_2, ha: "center" });
+    line(190, ya + 40, ax0 - 40, ya + 40, { color: GREEN, lw: 3 });
+    if (g < 1) text(cx(15) + cw, yc + ch + 30, "the lanes wait for the next numbers", { fs: 13, color: INK_2, ha: "right" });
+  }
+  return { done };
+}
+
+// the time per number of every way seen so far, on a log scale
+const px0 = 330, px1 = 1180, py0 = 470, rowH = 44;
+const PX = v => px0 + (Math.log10(v) + 1) / 3 * (px1 - px0);     // 0.1 ns .. 100 ns
+function chart(k) {
+  text(60, py0 - 30, "Time per number (log scale), measured on haskell", { fs: 14, bold: true });
+  const LX = { add: 600, poly: 760, ram: 980 };
+  for (const [key, [name, col]] of Object.entries(CASES)) {
+    out.push(`<circle cx="${LX[key]}" cy="${py0 - 30}" r="6" fill="${col}"/>`);
+    text(LX[key] + 12, py0 - 30, name, { fs: 12.5, color: INK_2 });
+  }
+  for (const v of [0.1, 1, 10, 100]) {
+    line(PX(v), py0, PX(v), py0 + 4 * rowH - 10, { color: GRID });
+    text(PX(v), py0 + 4 * rowH + 4, `${v} ns`, { fs: 11.5, color: MUTED, ha: "center" });
+  }
+  ROWS.forEach((r, i) => {
+    const y = py0 + i * rowH + rowH / 2 - 5;
+    line(px0, y, px1, y, { color: GRID });
+    text(px0 - 14, y, r, { fs: 13, ha: "right", color: INK });
+  });
+  // labels above the dot; beside it, on the free side, when a dot already sits close by in the same row
+  const shown = DATA.dots.filter(d => d.step <= k);
+  shown.forEach((d, j) => {
+    const y = py0 + d.row * rowH + rowH / 2 - 5, x = PX(d.v), col = CASES[d.case][1], cur = d.step === k;
+    const near = shown.slice(0, j).find(e => e.row === d.row && Math.abs(PX(e.v) - x) < 46);
+    out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${cur ? 8 : 6}" fill="${col}" stroke="#ffffff" stroke-width="2"/>`);
+    if (cur) out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="12" fill="none" stroke="${ORANGE}" stroke-width="1.5"/>`);
+    const o = { fs: 11.5, color: INK_2, bold: cur };
+    if (!near) text(x, y - 15, d.text, { ...o, ha: "center" });
+    else if (PX(near.v) > x) text(x - 14, y, d.text, { ...o, ha: "right" });
+    else text(x + 14, y, d.text, { ...o, ha: "start" });
+  });
+}
+
+function draw(t) {
+  const k = stepOf(t), st = ST[k], g = growthOf(t);
+  text(60, 52, st.title, { fs: 28 });
+  text(60, 90, st.sub, { fs: 15, color: INK_2 });
+  const L = lanes(st.mode), groups = NS / L, doneGroups = g >= 1 ? groups : Math.floor(g * groups + EPS);
+  const elapsed = g >= 1 ? st.per * NS : g * NS * st.per;
+  text(W - 60, 52, fmtT(elapsed), { fs: 24, ha: "right", mono: true });
+  text(W - 60, 84, `${doneGroups * L} of ${NS} numbers`, { fs: 13, ha: "right", color: INK_2 });
+  arrays(st, g);
+  chart(k);
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+const VIEWS = [{
+  id: "main", label: "Step by step", tmax: ST.length - 0.001, snap: 0.001, unit: "steps",
+  speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw,
+  seek: x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (ST.length - 1)), 0), ST.length - 1),
+}];
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
