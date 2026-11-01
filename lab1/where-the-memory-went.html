@@ -56,6 +56,7 @@ header p { margin: 0; color: var(--ink-2); max-width: 900px; }
 .term { background: #1d1d1b; color: #e9e8e2; font-family: Menlo, Consolas, monospace; font-size: 12.5px; border-radius: 8px;
   padding: 10px 12px; min-height: 92px; white-space: pre-wrap; margin-top: 10px; }
 .term .p { color: #9fd3a8; }
+.term .m { color: #a9a79f; }
 footer { color: var(--muted); font-size: 12.5px; padding: 0 24px 24px; max-width: 1000px; }
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; padding: 10px 16px 24px; }
@@ -87,7 +88,7 @@ footer { color: var(--muted); font-size: 12.5px; padding: 0 24px 24px; max-width
     <div id="visual"></div>
   </main>
 </div>
-<footer>Recorded with <code>tools/record.py</code> in the course container on a Mac (Docker VM with 4 CPUs and 4 GiB; container limit 2 GiB, no swap), 19 October 2026. Your laptop gives different times. A copy of <code>report.py</code> printed the time after each line; the program is otherwise unchanged.</footer>
+<footer>Recorded with <code>tools/record.py</code> in the course container on a Mac (Docker VM with 4 CPUs and 4 GiB; container limit 2 GiB, no swap), 19 October 2026. Your laptop gives different times. A copy of <code>report.py</code> printed the time after each line; the program is otherwise unchanged. The runs on the first 1, 2 and 4 million orders were measured in the same container, 17-18 October 2026.</footer>
 <script>
 const DATA = {"t":[0.0,0.051,0.1,0.154,0.2,0.251,0.301,0.35,0.401,0.451,0.502,0.555,0.601,0.651,0.705,0.75,0.803,0.851,0.904,0.95,1.0,1.052,1.1,1.151,1.201,1.25,1.3,1.35,1.4,1.454,1.5,1.551,1.6,1.65,1.701,1.755,1.801,1.855,1.902,1.95,2.0,2.054,2.1,2.154,2.205,2.252,2.304,2.351,2.403,2.45,2.504,2.554,2.601,2.655,2.703,2.752,2.803,2.852,2.905,2.95,3.003,3.053,3.102,3.154,3.201,3.254,3.3,3.354,3.403,3.453,3.503,3.55,3.601,3.65,3.7,3.75,3.8,3.85,3.903,3.952,4.004,4.051,4.1,4.15,4.2,4.254,4.303,4.35,4.4,4.45,4.5,4.551,4.6,4.653,4.7,4.755,4.8,4.855,4.901,4.952,5.0,5.054,5.105,5.155,5.201,5.254,5.301,5.355,5.405,5.455,5.501,5.55,5.6,5.655,5.705,5.755,5.804,5.852,5.905,5.95,6.003,6.055,6.104,6.154,6.202,6.254,6.301,6.351,6.4,6.45,6.5,6.55,6.6,6.65,6.705,6.755,6.805,6.855,6.901,6.95,7.005,7.051,7.104,7.151,7.205,7.251,7.305,7.351,7.405,7.452,7.505,7.552,7.6,7.652,7.7,7.751,7.8,7.854,7.901,7.951,8.0,8.054,8.1,8.153,8.201,8.251,8.301,8.352,8.4,8.45,8.5,8.551,8.601,8.65,8.701,8.751,8.8,8.854,8.9,8.95,9.002,9.05,9.104,9.15,9.204,9.25,9.305,9.351,9.405,9.451,9.501,9.551,9.6,9.652,9.7,9.751,9.805,9.852,9.905,9.952,10.001,10.05,10.101,10.15,10.2,10.25,10.303,10.353,10.4,10.455,10.501,10.555,10.601,10.651,10.7,10.754,10.8,10.854,10.9,10.954,11.001,11.053,11.101,11.153,11.203,11.252,11.304,11.351,11.404,11.45,11.505,11.55,11.6,11.654,11.703,11.753,11.801,11.854,11.901,11.951,12.001,12.054,12.1,12.154,12.2,12.254,12.303,12.353,12.403,12.45,12.504,12.555,12.601,12.65,12.705,12.751,12.805,12.851,12.905,12.953,13.004,13.052,13.104,13.151,13.2,13.25,13.304,13.35,13.404,13.45,13.504,13.55,13.6,13.65,13.701,13.755,13.801,13.855,13.901,13.951,14.0,14.053,14.1,14.153,14.2,14.253,14.301,14.353,14.4,14.452,14.504,14.554,14.601,14.655,14.703,14.755,14.802,14.855,14.902,14.953,15.005,15.054,15.1,15.155,15.204,15.255,15.303,15.351,15.401,15.452],"rss":[0.5,21.8,25.5,32.5,33.5,57.6,69.7,75.9,84.2,90.9,91.2,93.4,94.7,104.6,105.2,106.1,106.1,106.7,108.6,109.7,111.0,112.3,123.2,134.9,141.6,150.2,159.1,168.2,176.4,185.0,191.5,200.1,209.0,218.9,226.3,235.0,241.6,252.6,262.7,269.9,276.4,285.0,293.8,303.7,311.3,317.9,326.5,333.1,341.6,350.6,360.9,367.9,374.5,383.1,391.7,400.7,411.4,418.0,424.5,431.1,441.7,450.8,460.9,468.0,474.6,483.1,489.7,501.4,509.4,516.0,524.6,531.2,539.8,548.8,558.9,565.7,574.5,581.3,587.8,594.4,605.3,612.0,620.6,631.1,637.9,644.4,651.0,659.6,666.2,675.0,681.7,691.4,701.1,707.6,714.2,722.8,729.4,740.4,747.4,753.5,763.6,770.8,779.4,788.0,794.8,806.7,809.8,819.6,828.7,836.1,842.6,849.2,855.8,864.4,873.2,879.9,889.5,899.2,905.8,912.4,921.0,929.6,938.6,949.1,955.8,962.4,969.0,977.6,986.3,993.1,1002.2,1008.3,1017.4,1027.1,1034.2,1120.2,1149.1,1167.9,1211.9,1221.1,1267.7,1277.9,1303.8,1333.3,1344.7,1398.7,1474.0,1484.0,1504.0,1512.4,1533.6,1533.6,1550.5,1584.9,1375.7,1036.1,1036.1,1036.1,1082.2,1126.2,1184.2,1216.2,1302.2,1320.1,1320.1,1320.1,1326.2,1336.2,1372.2,1380.2,1382.2,1382.2,1392.3,1418.3,1430.3,1472.3,1482.3,1484.3,1484.3,1484.2,1504.2,1536.2,1544.2,1584.2,1590.3,1590.3,1590.3,1590.3,1616.3,1646.3,1656.3,1694.3,1702.3,1706.4,1706.4,1714.4,1728.4,1738.4,1750.4,1763.9,1781.9,1712.0,1583.8,1556.5,1438.9,1352.3,1183.8,1191.4,1321.6,1506.1,1642.8,1706.8,1647.8,1657.8,1667.8,1677.8,1687.8,1697.8,1706.4,1402.7,1265.8,1321.7,1327.7,1333.7,1339.7,1345.7,1349.7,1336.6,1201.1,1223.2,1237.0,1243.0,1247.0,1255.0,1259.0,1264.1,1266.2,1300.2,1311.0,1317.0,1323.0,1329.0,1335.0,1306.2,1368.2,1391.0,1397.0,1403.0,1409.0,1415.0,1386.2,1449.2,1468.0,1474.0,1480.0,1486.0,1492.0,1463.2,1531.2,1556.0,1562.0,1568.0,1574.0,1578.0,1600.4,1603.2,1634.0,1638.0,1644.0,1650.0,1656.0,1660.2,1657.2,1709.2,1716.1,1722.1,1726.1,1734.1,1738.1,1741.3,1764.9,1793.8,1799.8,1805.8,1811.8,1817.8,1821.8,1801.0,1863.0,1877.8,1883.8,1889.8,1895.8,1901.8,1908.1,1915.0,1963.0,1969.8,1975.8,1981.8,1987.8,1991.8,2022.1,2012.7,2043.5,2047.5,2053.5,2059.5,2065.5,2069.8],"cur":[11.3,21.3,25.6,32.6,34.1,38.8,44.4,49.2,58.0,60.7,61.7,64.0,65.5,75.9,77.1,78.6,79.1,79.9,82.4,84.2,85.7,87.7,98.9,110.4,117.2,125.7,134.7,143.9,151.9,160.7,167.2,175.7,184.7,194.7,202.2,210.7,217.4,228.4,238.7,245.7,252.2,260.9,269.7,279.7,287.2,293.9,302.4,308.9,317.7,326.7,336.9,343.9,350.4,359.2,367.7,376.7,387.4,394.2,400.7,407.2,417.9,426.9,437.2,444.2,450.7,459.4,465.9,477.7,485.7,492.4,500.9,507.4,516.2,525.2,535.2,542.2,550.9,557.7,564.2,570.9,581.9,588.4,597.2,607.7,614.4,620.9,627.7,636.2,642.7,651.7,658.4,668.2,677.7,684.4,690.9,699.4,706.2,717.2,724.2,730.4,740.7,747.9,756.4,765.2,771.9,783.9,786.9,796.9,805.9,813.2,819.7,826.4,832.9,841.7,850.4,857.2,866.9,876.4,883.2,889.7,898.2,906.9,915.9,926.4,933.2,939.9,946.4,954.9,963.9,970.7,979.7,985.9,994.9,1004.7,1011.9,1098.1,1126.8,1145.8,1190.1,1199.1,1245.8,1256.1,1281.8,1311.6,1322.8,1377.1,1452.3,1462.6,1482.6,1490.8,1512.1,1512.1,1529.1,1563.6,1353.8,1011.6,1011.6,1011.6,1057.8,1101.8,1160.1,1192.1,1278.3,1296.3,1296.3,1296.3,1302.3,1312.3,1348.3,1356.3,1358.5,1358.5,1368.5,1394.5,1406.5,1448.7,1458.7,1460.7,1460.7,1462.2,1482.2,1514.5,1522.5,1562.5,1568.7,1568.7,1568.7,1568.7,1594.7,1624.7,1634.7,1672.9,1680.9,1684.9,1684.9,1692.9,1706.9,1716.9,1729.1,1742.6,1760.6,1690.4,1562.1,1562.0,1417.0,1330.3,1160.7,1167.7,1298.2,1482.7,1619.7,1683.9,1624.6,1634.6,1644.6,1654.6,1664.6,1674.6,1683.3,1379.4,1241.9,1298.1,1304.1,1310.1,1316.1,1322.1,1326.1,1312.5,1177.2,1199.2,1212.9,1218.9,1222.9,1231.2,1235.2,1240.2,1242.3,1276.3,1287.1,1293.1,1299.1,1305.3,1311.3,1282.2,1344.5,1367.2,1373.2,1379.2,1385.5,1391.5,1362.4,1428.6,1447.4,1453.6,1459.6,1465.6,1471.6,1442.8,1510.8,1535.8,1541.8,1547.8,1553.8,1557.8,1580.0,1582.9,1613.9,1617.9,1623.9,1629.9,1635.9,1640.2,1637.1,1689.1,1696.1,1702.1,1706.1,1714.1,1718.1,1721.3,1745.0,1774.0,1780.0,1786.0,1792.0,1798.0,1802.0,1781.1,1843.4,1858.1,1864.1,1870.1,1876.1,1882.1,1890.4,1895.3,1943.3,1950.3,1956.3,1962.3,1968.3,1972.3,2002.5,1995.4,2026.4,2030.4,2036.4,2042.4,2045.8,2048.0],"marks":[{"t":0.014,"rss":10,"label":"start"},{"t":10.285,"rss":1184,"label":"read_csv done"},{"t":10.993,"rss":1256,"label":"to_datetime done"},{"t":11.033,"rss":1319,"label":"revenue done"},{"t":11.47,"rss":1233,"label":"month 1 done"},{"t":11.861,"rss":1306,"label":"month 2 done"},{"t":12.217,"rss":1386,"label":"month 3 done"},{"t":12.565,"rss":1463,"label":"month 4 done"},{"t":12.919,"rss":1551,"label":"month 5 done"},{"t":13.272,"rss":1629,"label":"month 6 done"},{"t":13.651,"rss":1709,"label":"month 7 done"},{"t":14.029,"rss":1791,"label":"month 8 done"},{"t":14.412,"rss":1873,"label":"month 9 done"},{"t":14.801,"rss":1963,"label":"month 10 done"},{"t":15.178,"rss":2039,"label":"month 11 done"}],"kill":15.452,"end":15.5,"events":{"low":0,"high":0,"max":75,"oom":1,"oom_kill":1,"oom_group_kill":0},"readPeak":1781.9,"rssAt":{"read":1184,"dates":1256,"revenue":1319},"curAt":{"month11":2010}};
 'use strict';
@@ -293,7 +294,11 @@ const D = DATA;
 const mark = name => D.marks.find(m => m.label === name).t;
 const READ = mark('read_csv done'), DATES = mark('to_datetime done'), REVENUE = mark('revenue done');
 const MONTHS = D.marks.filter(m => m.label.startsWith('month')).map(m => m.t);
-const KILL = D.kill, AFTER = 6;
+const KILL = D.kill, SCALE = 8, AFTER = 6;
+// Other runs, measured on the first 1, 2 and 4 million orders (17-18 Oct 2026): table printed by report.py and
+// peak memory from /usr/bin/time, in MiB.
+const RUNS = [{ m: 1, table: 106, peak: 505 }, { m: 2, table: 211, peak: 836 }, { m: 4, table: 423, peak: 1535 }];
+const SLOPE = (RUNS[2].peak - RUNS[0].peak) / (RUNS[2].m - RUNS[0].m), WHOLE = RUNS[0].peak + SLOPE * (8.4 - 1);
 
 const stages = [
   { title: 'Reading the file', t0: 0, t1: READ,
@@ -328,7 +333,17 @@ const stages = [
       the pipeline and the run on its own, you saw 2.</p>
       <p>A process cannot catch SIGKILL: no <code>MemoryError</code>, no traceback, nothing from Python. The shell prints
       <code>Killed</code>, and the exit status is 128 + 9 = <b>137</b>. The <code>pd.concat</code> on the next line never ran.</p>` },
-  { title: 'The missing line', t0: D.end, t1: D.end + AFTER,
+  { title: 'Smaller files', t0: D.end, t1: D.end + SCALE,
+    q: 'We run <code>report.py</code> on the first 1, 2 and 4 million orders of the file. How does its peak memory grow?',
+    options: ['It stays about the same: the program keeps only the result', 'It grows with the orders, by about the same amount for every million', 'It grows much faster than the orders'], answer: 1,
+    explain: `<p>The peaks are <b>505, 836 and 1,535 MiB</b> for 1, 2 and 4 million orders, and the table that
+      <code>report.py</code> prints is 106, 211 and 423 MiB. Every extra million orders adds about <b>350 MiB</b>: the
+      program holds all the orders in memory at once, with the copies of the monthly tables, so its memory grows with
+      the file.</p>
+      <p>A straight line through the three points reaches about <b>3 GiB</b> at the 8.4 million orders of the whole
+      file, well above the limit of 2 GiB. It is an estimate: on our cluster, with no limit, the whole file peaked at
+      2.6 GiB. Either way, it does not fit.</p>` },
+  { title: 'The missing line', t0: D.end + SCALE, t1: D.end + SCALE + AFTER,
     q: 'Run as <code>python3 steps/report.py | tee /tmp/report.log</code>, the line <code>report: loaded …</code> never reaches the log. Where was it when the process was killed?',
     options: ['In the pipe, between Python and <code>tee</code>', 'In Python\'s output buffer, in the memory of the process', 'In the page cache, on its way to the disk'], answer: 1,
     explain: `<p>When its output is a terminal, Python writes every line at once. When its output is a pipe, Python
@@ -389,6 +404,44 @@ function drawContainer(t) {
   txt(g, x0, 160, 'Everything else: Python, pandas, temporary memory and a few MiB of page cache.', { 'font-size': 11.5, fill: C.muted });
 }
 
+function size(h) {
+  if (+sv.getAttribute('height') !== h) { sv.setAttribute('viewBox', `0 0 760 ${h}`); sv.setAttribute('height', h); }
+}
+
+function drawScale(tt) {
+  $('schemaTitle').innerHTML = 'Peak memory of <code>report.py</code> on the first 1, 2 and 4 million orders';
+  const m = { l: 74, r: 50, t: 36, b: 36 }, pw = 760 - m.l - m.r, ph = 230 - m.t - m.b, ymax = 3600;
+  const x = v => m.l + pw * v / 8.4, y = v => m.t + ph * (1 - v / ymax);
+  for (const [v, s] of [[0, '0'], [1024, '1 GiB'], [2048, '2 GiB'], [3072, '3 GiB']]) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: C.grid }, g);
+    txt(g, m.l - 8, y(v) + 4, s, { 'text-anchor': 'end', 'font-size': 12 });
+  }
+  el('line', { x1: m.l, x2: m.l + pw, y1: y(0), y2: y(0), stroke: C.axis }, g);
+  for (const v of [1, 2, 4, 8.4]) txt(g, x(v), 230 - 16, String(v), { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.muted });
+  txt(g, m.l + pw, 230 - 2, 'million orders', { 'text-anchor': 'end', 'font-size': 11.5, fill: C.muted });
+  el('line', { x1: m.l, x2: m.l + pw, y1: y(2048), y2: y(2048), stroke: C.ink2, 'stroke-width': 1.5, 'stroke-dasharray': '6 4' }, g);
+  txt(g, m.l + 6, y(2048) - 6, 'limit (memory.max): 2 GiB', { 'font-size': 12, fill: C.ink2 });
+  // legend
+  el('circle', { cx: m.l + 6, cy: 14, r: 5, fill: C.blue }, g); txt(g, m.l + 16, 18, 'peak memory', { 'font-size': 12 });
+  el('rect', { x: m.l + 116, y: 9, width: 10, height: 10, fill: C.axis }, g); txt(g, m.l + 132, 18, 'table, as report.py prints it', { 'font-size': 12 });
+  const shown = RUNS.filter((r, k) => tt >= [1, 2.5, 4][k]);
+  if (tt >= 5.5) {
+    const f = ease((tt - 5.5) / 1.5), xe = 4 + (8.4 - 4) * f;
+    el('path', { d: `M${x(1)},${y(RUNS[0].peak)} L${x(4)},${y(RUNS[2].peak)}`, stroke: C.blue, 'stroke-width': 2, fill: 'none' }, g);
+    el('path', { d: `M${x(4)},${y(RUNS[2].peak)} L${x(xe)},${y(RUNS[0].peak + SLOPE * (xe - 1))}`, stroke: C.blue,
+      'stroke-width': 2, 'stroke-dasharray': '5 4', fill: 'none' }, g);
+  }
+  for (const r of shown) {
+    el('rect', { x: x(r.m) - 5, y: y(r.table) - 5, width: 10, height: 10, fill: C.axis, stroke: '#fff', 'stroke-width': 2 }, g);
+    el('circle', { cx: x(r.m), cy: y(r.peak), r: 5.5, fill: C.blue, stroke: '#fff', 'stroke-width': 2 }, g);
+    txt(g, x(r.m) - 10, y(r.peak) - 10, `${fmt(r.peak)} MiB`, { 'text-anchor': 'end', 'font-size': 12, fill: C.ink });
+  }
+  if (tt >= 7) {
+    el('circle', { cx: x(8.4), cy: y(WHOLE), r: 5.5, fill: '#fff', stroke: C.blue, 'stroke-width': 2 }, g);
+    txt(g, x(8.4) - 12, y(WHOLE) - 10, `whole file: about ${Math.round(WHOLE / 1024)} GiB`, { 'text-anchor': 'end', 'font-size': 12.5, fill: C.bad, 'font-weight': 'bold' });
+  }
+}
+
 function drawTee(tt) {
   $('schemaTitle').innerHTML = 'The same run, with its output going through a pipe to <code>tee</code>';
   const killed = tt >= 3;
@@ -416,8 +469,15 @@ function terminal(t, k) {
     if (t >= READ) lines.push('report: loaded 8,400,000 orders (887 MiB)');
     if (t >= D.end - 1e-6) lines.push('Killed', '<span class="p">$</span> echo $?', '137', '<span class="p">$</span> cat /sys/fs/cgroup/memory.events',
       ...Object.entries(D.events).map(([key, v]) => `${key} ${v}`));
-  } else {
+  } else if (k === 4) {
     const tt = t - D.end;
+    lines = ['<span class="p">$</span> head -n 1000001 ~/data/sales_2025.csv > /tmp/orders_1m.csv',
+      '<span class="p">$</span> DATA=/tmp/orders_1m.csv OUT=/tmp /usr/bin/time -f "$T" python3 steps/report.py'];
+    if (tt >= 1) lines.push('report: loaded 1,000,000 orders (106 MiB)', 'report: done');
+    if (tt >= 2.5) lines.push('<span class="m">… the same with head -n 2000001 and head -n 4000001:</span>', 'report: loaded 2,000,000 orders (211 MiB)', 'report: done');
+    if (tt >= 4) lines.push('report: loaded 4,000,000 orders (423 MiB)', 'report: done');
+  } else {
+    const tt = t - D.end - SCALE;
     lines = ['<span class="p">$</span> python3 steps/report.py | tee /tmp/report.log'];
     if (tt >= 4) lines.push('<span class="p">$</span> echo ${PIPESTATUS[@]}', '137 0');
     if (tt >= 5) lines.push('<span class="p">$</span> cat /tmp/report.log', '<span class="p">$</span>');
@@ -427,11 +487,13 @@ function terminal(t, k) {
 
 Explainer({
   stages, speed: 1,
-  clock: (t, s) => s === stages[4] ? 'after the run' : `t = ${Math.min(t, D.end).toFixed(2)} s`,
+  clock: (t, s) => s === stages[4] ? 'other runs, on smaller files' : s === stages[5] ? 'after the run'
+    : `t = ${Math.min(t, D.end).toFixed(2)} s`,
   draw(t, k) {
     chart.update(Math.min(t, D.end));
     g.innerHTML = '';
-    if (k < 4) drawContainer(t); else drawTee(t - D.end);
+    size(k === 4 ? 230 : 170);
+    if (k < 4) drawContainer(t); else if (k === 4) drawScale(t - D.end); else drawTee(t - D.end - SCALE);
     terminal(t, k);
   },
 });

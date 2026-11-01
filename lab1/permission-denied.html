@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warm-up: Permission Denied</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --axis: #c3c2b7; --grid: #e1e0d9;
+  --surface: #ffffff; --panel: #f7f6f2; --accent: #eb6834; --blue: #2a78d6; --good: #1baf7a; --bad: #c4352b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 15px/1.5 Arial, Helvetica, sans-serif; }
+code, .mono { font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 13px; }
+header { padding: 18px 24px 6px; }
+header .kicker { color: var(--ink-2); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+header h1 { margin: 2px 0 2px; font-size: 26px; }
+header p { margin: 0; color: var(--ink-2); max-width: 900px; }
+.layout { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 12px 24px 30px; align-items: start; }
+.side { position: sticky; top: 10px; }
+.steps { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: step; }
+.steps li { counter-increment: step; padding: 6px 10px 6px 38px; position: relative; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.steps li::before { content: counter(step); position: absolute; left: 8px; top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--axis); text-align: center; line-height: 20px; font-size: 12px; color: var(--ink-2); background: #fff; }
+.steps li.done::before { background: var(--panel); border-color: var(--ink-2); }
+.steps li.on { background: var(--panel); color: var(--ink); font-weight: bold; }
+.steps li.on::before { border-color: var(--ink); color: var(--ink); }
+.card { background: var(--panel); border-radius: 10px; padding: 14px 16px; }
+.card h2 { margin: 0 0 6px; font-size: 18px; }
+.card .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin: 10px 0 4px; }
+.card p { margin: 6px 0; }
+.options { display: grid; gap: 6px; margin: 6px 0; }
+.options button { text-align: left; font: inherit; padding: 7px 10px; border-radius: 6px; border: 1.5px solid var(--axis); background: #fff; cursor: pointer; }
+.options button:hover:not(:disabled) { border-color: var(--ink-2); }
+.options button.chosen { border-color: var(--ink); }
+.options button.right { border-color: var(--good); background: #eaf7f1; }
+.options button.wrong { border-color: var(--bad); background: #fbeceb; }
+.options button:disabled { cursor: default; color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.actions button, .transport button, .transport select { font: inherit; border: 1px solid var(--axis); background: #fff; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.actions button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+.actions button:disabled { opacity: .45; cursor: default; }
+.verdict { font-weight: bold; }
+.verdict.right { color: #12784f; } .verdict.wrong { color: var(--bad); }
+.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.transport .clock { font-family: Menlo, Consolas, monospace; font-size: 17px; margin-left: 10px; }
+.transport .note { color: var(--ink-2); font-size: 13px; }
+.scrub { width: 100%; height: 30px; display: block; cursor: pointer; touch-action: none; margin-bottom: 8px; }
+.visual svg { display: block; max-width: 100%; height: auto; }
+.visual h3 { font-size: 14px; font-weight: normal; color: var(--ink-2); margin: 8px 0 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); font-size: 12.5px; margin: 2px 0; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.line { height: 3px; } .sw.dash { height: 0; border-top: 2px dashed var(--ink-2); border-radius: 0; }
+.term { background: #1d1d1b; color: #e9e8e2; font-family: Menlo, Consolas, monospace; font-size: 12.5px; border-radius: 8px;
+  padding: 10px 12px; min-height: 92px; white-space: pre-wrap; margin-top: 10px; }
+.term .p { color: #9fd3a8; }
+.term .m { color: #a9a79f; }
+footer { color: var(--muted); font-size: 12.5px; padding: 0 24px 24px; max-width: 1000px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; padding: 10px 16px 24px; }
+  header, footer { padding-left: 16px; padding-right: 16px; }
+  .side { position: static; }
+}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Lab 1 · The Nightly Report</div>
+  <h1>Warm-up: Permission Denied</h1>
+  <p>Why <code>./run_report.sh</code> was refused at the start of the lab, one step at a time. At each step, predict what happens, then watch.</p>
+</header>
+<div class="layout">
+  <aside class="side">
+    <ol class="steps" id="steps"></ol>
+    <div class="card" id="card"></div>
+  </aside>
+  <main class="visual">
+    <div class="transport">
+      <button id="play">&#9654; Play</button>
+      <button id="restart">&#8634; Start of the step</button>
+      <label class="note">Speed <select id="speed"></select></label>
+      <span class="clock" id="clock"></span>
+    </div>
+    <svg class="scrub" id="scrub"></svg>
+    <div id="visual"></div>
+  </main>
+</div>
+<footer>The error message and the exit status were checked in the course container, 19 October 2026; the modes and the <code>git diff</code> output with bash 5 and git on macOS. Windows was not tested.</footer>
+<script>
+const DATA = {};
+'use strict';
+// Shared by the three explainers: the stages (predict, observe, explain), the transport, and SVG helpers.
+const NS = 'http://www.w3.org/2000/svg';
+const C = { ink: '#0b0b0b', ink2: '#52514e', muted: '#898781', axis: '#c3c2b7', grid: '#e1e0d9', panel: '#f7f6f2',
+  blue: '#2a78d6', orange: '#eb6834', green: '#1baf7a', yellow: '#eda100', pink: '#e87ba4', bad: '#c4352b',
+  blueFill: '#cde2fb', orangeFill: '#fbd9c9', greenFill: '#c9eedd', grayFill: '#e9e8e2', yellowFill: '#f6eec4' };
+const $ = id => document.getElementById(id);
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, attrs = {}) {
+  const t = el('text', Object.assign({ x, y, 'font-size': 13, fill: C.ink2, 'font-family': 'Arial, Helvetica, sans-serif' }, attrs), parent);
+  t.textContent = s;
+  return t;
+}
+function box(parent, x, y, w, h, fill, stroke, attrs = {}) {
+  return el('rect', Object.assign({ x, y, width: Math.max(0, w), height: Math.max(0, h), rx: 5, fill, stroke: stroke || 'none', 'stroke-width': 1.5 }, attrs), parent);
+}
+function arrow(parent, x1, y1, x2, y2, color, attrs = {}) {
+  const id = 'ah' + color.replace('#', '');
+  if (!document.getElementById(id)) {
+    // Arrowheads live in a hidden SVG of their own, so that redrawing a picture never removes them.
+    let host = document.getElementById('markers');
+    if (!host) { host = el('svg', { id: 'markers', width: 0, height: 0, style: 'position:absolute' }, document.body); el('defs', {}, host); }
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, host.firstChild);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }, m);
+  }
+  return el('line', Object.assign({ x1, y1, x2, y2, stroke: color, 'stroke-width': 2, 'marker-end': `url(#${id})` }, attrs), parent);
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = f => clamp(f, 0, 1);
+function interp(ts, vs, t) {
+  if (t <= ts[0]) return vs[0];
+  for (let k = 1; k < ts.length; k++) if (ts[k] >= t) {
+    const f = (t - ts[k - 1]) / ((ts[k] - ts[k - 1]) || 1);
+    return vs[k - 1] + (vs[k] - vs[k - 1]) * f;
+  }
+  return vs[vs.length - 1];
+}
+const fmt = n => Math.round(n).toLocaleString('en-US');
+let clipCount = 0;
+
+// A chart over time that is drawn up to the playhead, so that it grows as the replay plays.
+function timeChart(host, o) {
+  const W = o.width || 760, H = o.height || 200, m = { l: 74, r: 18, t: 10, b: 26 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const x = t => m.l + pw * clamp((t - o.t0) / (o.t1 - o.t0), 0, 1);
+  const y = v => m.t + ph * (1 - clamp(v / o.ymax, 0, 1));
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, host);
+  for (const b of o.bands || []) {
+    el('rect', { x: x(b.t0), y: m.t, width: x(b.t1) - x(b.t0), height: ph, fill: b.fill || C.panel }, svg);
+    if (b.label) txt(svg, (x(b.t0) + x(b.t1)) / 2, m.t + ph - 8, b.label, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.ink2 });
+  }
+  for (const v of o.yticks || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: C.grid }, svg);
+    txt(svg, m.l - 8, y(v) + 4, o.yfmt(v), { 'text-anchor': 'end', 'font-size': 12 });
+  }
+  for (const s of o.xticks || []) {
+    txt(svg, x(s), H - 6, o.xfmt ? o.xfmt(s) : `${s} s`, { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.muted });
+  }
+  el('line', { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: C.axis }, svg);
+  const cid = `clip${++clipCount}`;
+  const clip = el('rect', { x: m.l, y: 0, width: 0, height: H }, el('clipPath', { id: cid }, el('defs', {}, svg)));
+  const g = el('g', { 'clip-path': `url(#${cid})` }, svg);
+  for (const s of o.series) {
+    if (s.kind === 'area') {
+      let d = '';
+      s.t.forEach((t, k) => { d += `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`; });
+      for (let k = s.t.length - 1; k >= 0; k--) d += `L${x(s.t[k]).toFixed(1)},${y(s.base ? s.base[k] : 0).toFixed(1)}`;
+      el('path', { d: d + 'Z', fill: s.color, 'fill-opacity': 0.85, stroke: '#fff', 'stroke-width': 0.8 }, g);
+    } else {
+      const d = s.t.map((t, k) => `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(s.v[k]).toFixed(1)}`).join('');
+      el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.2, 'stroke-linejoin': 'round' }, g);
+    }
+  }
+  for (const h of o.hlines || []) {
+    el('line', { x1: m.l, x2: m.l + pw, y1: y(h.v), y2: y(h.v), stroke: C.ink2, 'stroke-width': 1.5, 'stroke-dasharray': '6 4' }, svg);
+    if (h.label) txt(svg, m.l + pw - 4, y(h.v) - 6, h.label, { 'text-anchor': 'end', 'font-size': 12, fill: C.ink2 });
+  }
+  const marks = (o.marks || []).map(mk => {
+    const gm = el('g', { visibility: 'hidden' }, svg);
+    el('line', { x1: x(mk.t), x2: x(mk.t), y1: y(mk.v) - 9, y2: y(mk.v) + 9, stroke: C.orange, 'stroke-width': 2 }, gm);
+    if (mk.label) txt(gm, x(mk.t), y(mk.v) - 13, mk.label, { 'text-anchor': 'middle', 'font-size': 11, fill: C.ink2 });
+    return [mk.t, gm];
+  });
+  const head = el('line', { y1: m.t, y2: m.t + ph, stroke: C.ink, 'stroke-width': 1.5 }, svg);
+  return {
+    update(t) {
+      clip.setAttribute('width', Math.max(0, x(t) - m.l + 1));
+      head.setAttribute('x1', x(t)); head.setAttribute('x2', x(t));
+      head.setAttribute('visibility', t >= o.t0 && t <= o.t1 + 1e-9 ? 'visible' : 'hidden');
+      for (const [mt, gm] of marks) gm.setAttribute('visibility', t >= mt ? 'visible' : 'hidden');
+    },
+  };
+}
+function legendHtml(items) {
+  return '<div class="legend">' + items.map(it => `<span><i class="sw ${it.kind || ''}" ${it.color ? `style="background:${it.color}"` : ''}></i>${it.name}</span>`).join('') + '</div>';
+}
+
+// The stages: each one asks for a prediction, plays its part of the replay at constant speed, then explains.
+function Explainer(cfg) {
+  const S = { k: 0, T: cfg.stages[0].t0, playing: false, last: null, speed: cfg.speed || 1,
+    chosen: cfg.stages.map(() => null), seen: cfg.stages.map(() => false) };
+  const END = cfg.stages[cfg.stages.length - 1].t1;
+  const stageAt = t => { for (let k = cfg.stages.length - 1; k >= 0; k--) if (t >= cfg.stages[k].t0 - 1e-9) return k; return 0; };
+
+  $('steps').innerHTML = cfg.stages.map((s, k) => `<li data-k="${k}">${s.title}</li>`).join('');
+  $('steps').addEventListener('click', e => { const li = e.target.closest('li'); if (li) go(+li.dataset.k); });
+  $('speed').innerHTML = [0.25, 0.5, 1, 2, 5, 10].map(v => `<option value="${v}" ${v === S.speed ? 'selected' : ''}>${v}&times;</option>`).join('');
+  $('speed').onchange = e => { S.speed = +e.target.value; };
+  $('play').onclick = () => S.playing ? pause() : play();
+  $('restart').onclick = () => { pause(); seek(cfg.stages[S.k].t0); };
+
+  function card() {
+    const s = cfg.stages[S.k], ch = S.chosen[S.k], shown = S.seen[S.k];
+    const opts = s.options.map((o, i) => {
+      let cls = '';
+      if (shown) cls = i === s.answer ? 'right' : (i === ch ? 'wrong' : '');
+      else if (i === ch) cls = 'chosen';
+      return `<button data-i="${i}" class="${cls}" ${shown || ch !== null ? 'disabled' : ''}>${String.fromCharCode(65 + i)}. ${o}</button>`;
+    }).join('');
+    let verdict = '';
+    if (shown) verdict = ch === null ? '<p class="verdict">You did not predict this one.</p>'
+      : ch === s.answer ? '<p class="verdict right">Your prediction was right.</p>' : '<p class="verdict wrong">Not what happened.</p>';
+    $('card').innerHTML = `<h2>${S.k + 1}. ${s.title}</h2>` +
+      `<div class="label">Predict</div><p>${s.q}</p><div class="options">${opts}</div>` +
+      (shown ? `<div class="label">What happened</div>${verdict}${s.explain}`
+        : `<p class="note" style="color:var(--ink-2);font-size:13px">${ch === null ? 'Choose an answer, then watch.' : 'Now watch what happens.'}</p>`) +
+      `<div class="actions">` +
+      (shown ? (S.k + 1 < cfg.stages.length ? `<button class="primary" id="next">Next step</button>` : '') :
+        `<button class="primary" id="watch">${ch === null ? 'Skip the prediction and watch' : 'Watch'}</button>`) +
+      `</div>`;
+    $('card').querySelectorAll('.options button').forEach(b => b.onclick = () => {
+      S.chosen[S.k] = +b.dataset.i; seek(s.t0); card(); play();
+    });
+    const w = $('watch'); if (w) w.onclick = () => { if (S.T >= s.t1 - 1e-6) seek(s.t0); play(); };
+    const n = $('next'); if (n) n.onclick = () => go(S.k + 1);
+    [...$('steps').children].forEach((li, k) => { li.classList.toggle('on', k === S.k); li.classList.toggle('done', S.seen[k]); });
+  }
+  function go(k) { pause(); S.k = k; S.T = cfg.stages[k].t0; card(); render(); }
+  function reveal() { if (!S.seen[S.k]) { S.seen[S.k] = true; card(); } }
+  function seek(t) {
+    S.T = clamp(t, cfg.stages[0].t0, END);
+    const k = stageAt(S.T);
+    if (k !== S.k) { S.k = k; card(); }
+    if (S.T >= cfg.stages[S.k].t1 - 1e-6) reveal();
+    render();
+  }
+  function play() {
+    const s = cfg.stages[S.k];
+    if (S.T >= s.t1 - 1e-6) { if (S.k + 1 < cfg.stages.length) { go(S.k + 1); } return; }
+    S.playing = true; S.last = null; $('play').innerHTML = '&#10074;&#10074; Pause';
+    requestAnimationFrame(frame);
+  }
+  function pause() { S.playing = false; $('play').innerHTML = '&#9654; Play'; }
+  function frame(now) {
+    if (!S.playing) return;
+    const s = cfg.stages[S.k];
+    if (S.last !== null) S.T += (now - S.last) / 1000 * S.speed * (s.rate || 1);
+    S.last = now;
+    if (S.T >= s.t1) { S.T = s.t1; pause(); reveal(); render(); return; }
+    render();
+    requestAnimationFrame(frame);
+  }
+  // The timeline under the transport: one segment per step.
+  const scrub = $('scrub');
+  function drawScrub() {
+    scrub.innerHTML = '';
+    const W = scrub.clientWidth || 700, H = 30, t0 = cfg.stages[0].t0;
+    scrub.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const x = t => 6 + (W - 12) * (t - t0) / (END - t0);
+    cfg.stages.forEach((s, k) => el('rect', { x: x(s.t0) + 1, y: 11, width: Math.max(1, x(s.t1) - x(s.t0) - 2), height: 8, rx: 3, fill: k % 2 ? '#d9d8d1' : '#c9c8c0' }, scrub));
+    S.knob = el('circle', { cy: 15, r: 7, fill: C.ink, stroke: '#fff', 'stroke-width': 2 }, scrub);
+    S.sx = x;
+  }
+  let drag = false;
+  const toT = ev => { const b = scrub.getBoundingClientRect(); const t0 = cfg.stages[0].t0; return t0 + clamp((ev.clientX - b.left - 6) / (b.width - 12), 0, 1) * (END - t0); };
+  scrub.onpointerdown = ev => { drag = true; scrub.setPointerCapture(ev.pointerId); pause(); seek(toT(ev)); };
+  scrub.onpointermove = ev => { if (drag) seek(toT(ev)); };
+  scrub.onpointerup = () => { drag = false; };
+  window.addEventListener('resize', () => { drawScrub(); render(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.key === ' ') { e.preventDefault(); S.playing ? pause() : play(); }
+  });
+
+  function render() {
+    $('clock').textContent = cfg.clock(S.T, cfg.stages[S.k]);
+    if (S.knob) S.knob.setAttribute('cx', S.sx(S.T));
+    cfg.draw(S.T, S.k);
+  }
+  drawScrub(); card(); render();
+}
+
+// Warm-up: ./run_report.sh is refused. Nothing to record here: the page steps through what the shell, the kernel
+// and git do. The message, the exit status 126, the modes and the git diff were checked with bash 5 and git.
+const PERM0 = '-rw-r--r--', PERM1 = '-rwxr-xr-x';
+const stages = [
+  { title: 'Starting the script', t0: 0, t1: 7,
+    q: '<code>./run_report.sh</code> asks the kernel to start the file as a program. What happens?',
+    options: ['The pipeline starts', 'The shell refuses: <code>Permission denied</code>', 'bash prints a syntax error'], answer: 1,
+    explain: `<p>To start a file as a program, the kernel checks that it has the execute permission (<code>x</code>) for
+      you. <code>run_report.sh</code> does not, so the start fails, and the shell prints
+      <code>bash: ./run_report.sh: Permission denied</code>.</p>
+      <p>The exit status is <b>126</b>: the shell found the command but could not run it.</p>` },
+  { title: 'Reading the permissions', t0: 7, t1: 14,
+    q: '<code>ls -l run_report.sh</code> starts with <code>-rw-r--r--</code>. Who may execute the file?',
+    options: ['Only its owner', 'Its owner and its group', 'Nobody'], answer: 2,
+    explain: `<p>The first character is the type of the file: <code>-</code> for a regular file. Then come three groups of
+      three: the owner, the group and everyone else. In each group, <code>r</code> is read, <code>w</code> is write and
+      <code>x</code> is execute, and <code>-</code> means the permission is missing.</p>
+      <p><code>-rw-r--r--</code>: the owner may read and write, everyone else may only read. Nobody may execute the
+      file.</p>` },
+  { title: 'bash run_report.sh', t0: 14, t1: 21,
+    q: '<code>bash run_report.sh</code> works with the same permissions. Why?',
+    options: ['bash ignores permissions', 'The kernel starts <code>/bin/bash</code>, which is executable; bash only reads the script', 'bash makes the file executable first'], answer: 1,
+    explain: `<p>Now the program is <code>/bin/bash</code>, and its <code>x</code> is set: <code>-rwxr-xr-x</code>. bash
+      opens <code>run_report.sh</code> as a text file and runs the commands it reads, one at a time. Reading needs
+      <code>r</code>, and everyone has it.</p>
+      <p>With <code>./run_report.sh</code>, the kernel has to start the file itself, and that needs <code>x</code>.</p>` },
+  { title: 'The fix', t0: 21, t1: 28,
+    q: 'After <code>chmod +x run_report.sh</code> in the container, what does <code>git diff</code> show on the laptop?',
+    options: ['Nothing: permissions are not part of the repository', '<code>old mode 100644</code>, <code>new mode 100755</code>', 'Every line of the file as changed'], answer: 1,
+    explain: `<p><code>chmod +x</code> adds <code>x</code> for the owner, the group and everyone else:
+      <code>-rwxr-xr-x</code>. The <code>work</code> folder is shared with the laptop, so the laptop sees the change
+      too.</p>
+      <p>git keeps one permission per file, executable or not: <code>100644</code> is a regular file,
+      <code>100755</code> an executable one. Commit and push, and your teammates get the fix with <code>git pull</code>.</p>
+      <p>On Windows, folders shared with the container usually show every file as executable, so the script may have
+      started at once, and git usually does not see file modes. There, record the fix with
+      <code>git update-index --chmod=+x run_report.sh</code> before committing.</p>` },
+];
+
+const V = $('visual');
+V.innerHTML = `<h3>The file and its permissions</h3><div id="file"></div><h3>Who starts what</h3><div id="who"></div>` +
+  `<div class="term" id="term"></div>`;
+const F = el('svg', { viewBox: '0 0 760 150', width: 760, height: 150 }, $('file'));
+const W = el('svg', { viewBox: '0 0 760 190', width: 760, height: 190 }, $('who'));
+const gf = el('g', {}, F), gw = el('g', {}, W);
+const mono = { 'font-family': 'Menlo, Consolas, monospace', 'font-size': 13, fill: C.ink };
+
+// The ten characters of a mode, one box each, with the owner, group and others brackets.
+// mark: 'missing' outlines the empty x slots in red; 'added' fills the new x slots in green.
+function perm(x, y, s, mark, labels) {
+  const w = 30, h = 34;
+  [...s].forEach((ch, k) => {
+    const xs = k === 3 || k === 6 || k === 9;
+    let fill = '#fff', edge = C.axis;
+    if (xs && mark === 'missing') { fill = '#fbeceb'; edge = C.bad; }
+    if (xs && mark === 'added') { fill = C.greenFill; edge = C.green; }
+    const bx = x + k * w + (k > 0 ? 8 : 0) + (k > 3 ? 8 : 0) + (k > 6 ? 8 : 0);
+    box(gf, bx, y, w - 4, h, fill, edge, { rx: 3 });
+    txt(gf, bx + (w - 4) / 2, y + 23, ch, Object.assign({}, mono, { 'text-anchor': 'middle', 'font-size': 17 }));
+  });
+  const groups = [['type', 0, 1], ['owner', 1, 3], ['group', 4, 3], ['others', 7, 3]];
+  groups.slice(0, labels).forEach(([name, k0, n]) => {
+    const x0 = x + k0 * w + (k0 > 0 ? 8 : 0) + (k0 > 3 ? 8 : 0) + (k0 > 6 ? 8 : 0);
+    const x1 = x0 + n * w - 4;
+    el('path', { d: `M${x0},${y + h + 6} V${y + h + 11} H${x1} V${y + h + 6}`, fill: 'none', stroke: C.ink2 }, gf);
+    txt(gf, (x0 + x1) / 2, y + h + 27, name, { 'text-anchor': 'middle', 'font-size': 12 });
+  });
+}
+
+function drawFile(t, k) {
+  gf.innerHTML = '';
+  const added = t >= 22.5;
+  txt(gf, 20, 24, 'run_report.sh', Object.assign({}, mono, { fill: C.ink2 }));
+  let labels = 4, mark = '';
+  if (k === 0) { labels = 0; mark = t >= 3 ? 'missing' : ''; }
+  else if (k === 1) { labels = clamp(Math.floor(t - 7), 0, 4); mark = t >= 12 ? 'missing' : ''; }
+  else if (k === 2) { labels = 4; mark = ''; }
+  else { mark = added ? 'added' : ''; }
+  perm(20, 40, added ? PERM1 : PERM0, mark, labels);
+  if (mark === 'missing') txt(gf, 400, 62, 'no x for anyone', { 'font-size': 13, fill: C.bad, 'font-weight': 'bold' });
+  if (mark === 'added') txt(gf, 400, 62, 'x for everyone', { 'font-size': 13, fill: '#12784f', 'font-weight': 'bold' });
+  if (k === 2) txt(gf, 400, 62, 'r for everyone: anyone may read it', { 'font-size': 13, fill: C.ink2 });
+  if (k === 3 && t >= 24) {
+    box(gf, 560, 30, 190, 74, C.panel, 'none');
+    txt(gf, 570, 50, 'git diff, on the laptop', { 'font-size': 11.5, fill: C.ink2 });
+    txt(gf, 570, 72, 'old mode 100644', Object.assign({}, mono, { 'font-size': 12.5, fill: C.bad }));
+    txt(gf, 570, 92, 'new mode 100755', Object.assign({}, mono, { 'font-size': 12.5, fill: '#12784f' }));
+  }
+}
+
+function actor(x, y, w, name, sub, on) {
+  box(gw, x, y, w, 48, '#fff', on ? C.ink2 : C.axis);
+  txt(gw, x + 10, y + 20, name, Object.assign({}, mono, { 'font-size': 12.5, fill: on ? C.ink : C.muted }));
+  if (sub) txt(gw, x + 10, y + 38, sub, { 'font-size': 11.5, fill: C.ink2 });
+}
+
+function drawWho(t, k) {
+  gw.innerHTML = '';
+  if (k === 0) {
+    actor(20, 20, 190, 'your shell', 'bash, in the container', true);
+    actor(300, 20, 170, 'the kernel', '', t >= 1.5);
+    actor(560, 20, 180, './run_report.sh', 'never started', false);
+    if (t >= 1.5) { arrow(gw, 212, 36, 298, 36, C.ink2); txt(gw, 255, 30, 'start it', { 'text-anchor': 'middle', 'font-size': 11.5 }); }
+    if (t >= 3) txt(gw, 300, 92, 'x for you? no', { 'font-size': 12.5, fill: C.bad, 'font-weight': 'bold' });
+    if (t >= 4.5) { arrow(gw, 298, 58, 212, 58, C.bad); txt(gw, 255, 76, 'refused', { 'text-anchor': 'middle', 'font-size': 11.5, fill: C.bad }); }
+    if (t >= 5.5) txt(gw, 20, 120, 'The shell prints the error and sets the exit status to 126.', { 'font-size': 12.5 });
+  } else if (k === 1) {
+    actor(20, 20, 190, 'your shell', 'bash, in the container', true);
+    txt(gw, 20, 100, 'ls -l only reads the mode of the file: nothing is started.', { 'font-size': 12.5 });
+  } else if (k === 2) {
+    actor(20, 20, 190, 'your shell', 'bash, in the container', true);
+    actor(300, 20, 170, 'the kernel', '', t >= 15);
+    actor(560, 20, 180, '/bin/bash', t >= 17 ? 'a new bash process' : '-rwxr-xr-x', t >= 17);
+    if (t >= 15) { arrow(gw, 212, 36, 298, 36, C.ink2); txt(gw, 255, 30, 'start bash', { 'text-anchor': 'middle', 'font-size': 11.5 }); }
+    if (t >= 16) txt(gw, 300, 92, 'x for you on /bin/bash? yes', { 'font-size': 12.5, fill: '#12784f', 'font-weight': 'bold' });
+    if (t >= 17) arrow(gw, 472, 44, 558, 44, C.ink2);
+    if (t >= 18.5) {
+      box(gw, 560, 110, 180, 40, C.panel, 'none');
+      txt(gw, 570, 135, 'run_report.sh, as text', Object.assign({}, mono, { 'font-size': 11.5 }));
+      arrow(gw, 650, 70, 650, 108, C.ink2);
+      txt(gw, 660, 94, 'reads it: r? yes', { 'font-size': 11.5, fill: '#12784f' });
+    }
+    if (t >= 19.5) txt(gw, 20, 170, 'bash runs the commands of the script, one at a time.', { 'font-size': 12.5 });
+  } else {
+    actor(20, 20, 190, 'your shell', 'bash, in the container', true);
+    actor(300, 20, 170, 'the kernel', '', t >= 25.5);
+    actor(560, 20, 180, './run_report.sh', t >= 26.5 ? 'running' : '', t >= 26.5);
+    if (t >= 25.5) { arrow(gw, 212, 36, 298, 36, C.ink2); txt(gw, 255, 30, 'start it', { 'text-anchor': 'middle', 'font-size': 11.5 }); }
+    if (t >= 26) txt(gw, 300, 92, 'x for you? yes', { 'font-size': 12.5, fill: '#12784f', 'font-weight': 'bold' });
+    if (t >= 26.5) arrow(gw, 472, 44, 558, 44, C.ink2);
+    if (t >= 22) txt(gw, 20, 130, 'chmod changes the mode of the file. It changes nothing in its text.', { 'font-size': 12.5 });
+  }
+}
+
+function terminal(t, k) {
+  const p = '<span class="p">$</span> ';
+  let lines = [];
+  if (k === 0) {
+    lines = [p + './run_report.sh'];
+    if (t >= 5.5) lines.push('bash: ./run_report.sh: Permission denied', p + 'echo $?', '126');
+  } else if (k === 1) {
+    lines = [p + 'ls -l run_report.sh', '-rw-r--r-- 1 analyst analyst 402 Oct 27 11:05 run_report.sh'];
+  } else if (k === 2) {
+    lines = [p + 'bash run_report.sh'];
+    if (t >= 20) lines.push('Nightly report started: 11:06:12', '…');
+  } else {
+    lines = [p + 'chmod +x run_report.sh'];
+    if (t >= 23) lines.push(p + 'ls -l run_report.sh', '-rwxr-xr-x 1 analyst analyst 402 Oct 27 11:05 run_report.sh');
+    if (t >= 26.5) lines.push(p + './run_report.sh', 'Nightly report started: 11:07:40', '…');
+  }
+  $('term').innerHTML = lines.join('\n');
+}
+
+Explainer({
+  stages, speed: 1,
+  clock: () => 'slowed down: each step takes a few milliseconds',
+  draw(t, k) { drawFile(t, k); drawWho(t, k); terminal(t, k); },
+});
+
+</script>
+</body>
+</html>

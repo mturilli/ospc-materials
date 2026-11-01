@@ -17,9 +17,10 @@ Each animation is a single HTML file with no dependencies. Open the link, or dow
 
 ## Lab 1: The Nightly Report
 
-What went wrong in the three tasks we did together in class, step by step. At each step, predict what happens, then watch.
+What went wrong in the warm-up and in the three tasks we did together in class, step by step. At each step, predict what happens, then watch.
 
-- [Task 1: Where the Memory Went](https://mturilli.github.io/ospc-materials/lab1/where-the-memory-went.html): a replay of `report.py` on the whole file. See how the memory grows from reading the file to the monthly tables, why the kernel kills the process instead of Python raising an error, and where the missing line of the log went.
+- [Warm-up: Permission Denied](https://mturilli.github.io/ospc-materials/lab1/permission-denied.html): why `./run_report.sh` was refused. See what the ten characters of `ls -l` say, why `bash run_report.sh` works anyway, and what `chmod +x` changes in the file and in git.
+- [Task 1: Where the Memory Went](https://mturilli.github.io/ospc-materials/lab1/where-the-memory-went.html): a replay of `report.py` on the whole file. See how the memory grows from reading the file to the monthly tables, why the kernel kills the process instead of Python raising an error, how the peak grows on 1, 2 and 4 million orders, and where the missing line of the log went.
 - [Task 2: Where grep Looked](https://mturilli.github.io/ospc-materials/lab1/where-grep-looked.html): `extracts.sh` one line at a time. See which file the relative path names after `cd`, where the error message of `grep` goes, and why the script still prints `done` and exits with status 0.
 - [Task 3: Three System Calls per Order](https://mturilli.github.io/ospc-materials/lab1/three-system-calls-per-order.html): what `audit.py` asks the kernel to do for every order, and what it costs on 8.4 million orders. See where each line is when `close` returns, and how many `write` calls one open file needs.
 
