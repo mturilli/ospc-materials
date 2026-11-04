@@ -177,7 +177,7 @@ h2 { font-size: 16px; margin: 0 0 8px; }
 </div>
 
 <script>
-const DATA = {"key":"python-threads","page":"threads","labels":{"computing":"Computing","waiting":"Waiting","race":"Race","lock":"Lock"},"views":{"computing":{"title":"Computing: four threads, one GIL","sub":"Four threads run Python code. A thread needs the GIL to run it, and the process has one.","unit":"ms","tmax":80,"axis":90,"tick":10,"lanes":["A","B","C","D"],"segs":[[0,"run",0,5],[1,"gil",0,5],[2,"gil",0,10],[3,"gil",0,15],[0,"gil",5,20],[1,"run",5,10],[1,"gil",10,25],[2,"run",10,15],[2,"gil",15,30],[3,"run",15,20],[0,"run",20,25],[3,"gil",20,35],[0,"gil",25,40],[1,"run",25,30],[1,"gil",30,45],[2,"run",30,35],[2,"gil",35,50],[3,"run",35,40],[0,"run",40,45],[3,"gil",40,55],[0,"gil",45,60],[1,"run",45,50],[1,"gil",50,65],[2,"run",50,55],[2,"gil",55,70],[3,"run",55,60],[0,"run",60,65],[3,"gil",60,75],[1,"run",65,70],[2,"run",70,75],[3,"run",75,80]],"gil":[{"t":0,"who":"A"},{"t":5,"who":"B"},{"t":10,"who":"C"},{"t":15,"who":"D"},{"t":20,"who":"A"},{"t":25,"who":"B"},{"t":30,"who":"C"},{"t":35,"who":"D"},{"t":40,"who":"A"},{"t":45,"who":"B"},{"t":50,"who":"C"},{"t":55,"who":"D"},{"t":60,"who":"A"},{"t":65,"who":"B"},{"t":70,"who":"C"},{"t":75,"who":"D"},{"t":80,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"A, B, C and D start, each with 20 ms of Python code to run. A takes the GIL and runs. B, C and D wait for it."},{"t":5,"label":"5 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":10,"label":"10 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":15,"label":"15 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":20,"label":"20 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":25,"label":"25 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":30,"label":"30 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":35,"label":"35 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":40,"label":"40 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":45,"label":"45 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":50,"label":"50 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":55,"label":"55 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":60,"label":"60 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":65,"label":"65 ms","text":"A has finished. B takes the GIL and runs."},{"t":70,"label":"70 ms","text":"B has finished. C takes the GIL and runs."},{"t":75,"label":"75 ms","text":"C has finished. D takes the GIL and runs."},{"t":80,"label":"80 ms","text":"D has finished after 80 ms. One after the other, the same four tasks take 80 ms too. At every moment one thread ran Python code and the others waited for the GIL."}],"cpus":4,"mem":[{"t":0,"text":"the variables of the program, seen by all four threads"}],"ref":{"label":"One after the other","value":80},"end":"4 threads: 80 ms. One after the other: 80 ms. No gain, even with four CPUs."},"waiting":{"title":"Waiting: four threads, one GIL","sub":"A little Python code, a long wait for the network, a little Python code.","unit":"ms","tmax":25,"axis":90,"tick":10,"lanes":["A","B","C","D"],"segs":[[0,"run",0,1],[1,"gil",0,1],[2,"gil",0,2],[3,"gil",0,3],[0,"io",1,21],[1,"run",1,2],[1,"io",2,22],[2,"run",2,3],[2,"io",3,23],[3,"run",3,4],[3,"io",4,24],[0,"run",21,22],[1,"run",22,23],[2,"run",23,24],[3,"run",24,25]],"gil":[{"t":0,"who":"A"},{"t":1,"who":"B"},{"t":2,"who":"C"},{"t":3,"who":"D"},{"t":4,"who":null},{"t":21,"who":"A"},{"t":22,"who":"B"},{"t":23,"who":"C"},{"t":24,"who":"D"},{"t":25,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"A, B, C and D start, each with 1 ms of Python code, a wait of 20 ms for the network, and 1 ms of Python code. A takes the GIL and runs. B, C and D wait for it."},{"t":1,"label":"1 ms","text":"A starts to wait for the network and lets go of the GIL. B takes the GIL and runs."},{"t":2,"label":"2 ms","text":"B starts to wait for the network and lets go of the GIL. C takes the GIL and runs."},{"t":3,"label":"3 ms","text":"C starts to wait for the network and lets go of the GIL. D takes the GIL and runs."},{"t":4,"label":"4 ms","text":"D starts to wait for the network and lets go of the GIL. No thread needs the GIL now: all of them are waiting, and the waits overlap."},{"t":21,"label":"21 ms","text":"A's wait is over and it takes the GIL."},{"t":22,"label":"22 ms","text":"A has finished. B's wait is over and it takes the GIL."},{"t":23,"label":"23 ms","text":"B has finished. C's wait is over and it takes the GIL."},{"t":24,"label":"24 ms","text":"C has finished. D's wait is over and it takes the GIL."},{"t":25,"label":"25 ms","text":"All four threads have finished after 25 ms. One after the other, the same work takes 88 ms. The Python code took turns, but the waits overlapped: 3.5 times faster, with no extra CPU."}],"cpus":4,"mem":[{"t":0,"text":"the variables of the program, seen by all four threads"}],"ref":{"label":"One after the other","value":88},"end":"4 threads: 25 ms. One after the other: 88 ms. A thread that waits needs no GIL and no CPU."},"race":{"title":"Race: read, wait, write","sub":"current = balance, a wait, balance = current + 1. No lock.","unit":"ms","tmax":7,"axis":14,"tick":1,"lanes":["A","B"],"segs":[[0,"run",0,1],[0,"io",1,5],[0,"run",5,6],[1,"gil",0,1],[1,"run",1,2],[1,"io",2,6],[1,"run",6,7]],"gil":[{"t":0,"who":"A"},{"t":1,"who":"B"},{"t":2,"who":null},{"t":5,"who":"A"},{"t":6,"who":"B"},{"t":7,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"Two deposits of 1. The balance is 10. A takes the GIL and reads the balance: current = 10."},{"t":1,"label":"1 ms","text":"A starts to wait and lets go of the GIL. B takes it and reads the balance: current = 10 too, because A has not written anything yet."},{"t":2,"label":"2 ms","text":"B starts to wait too. No thread needs the GIL now."},{"t":5,"label":"5 ms","text":"A's wait is over. A takes the GIL and writes current + 1, that is 11."},{"t":6,"label":"6 ms","text":"A has finished: the balance is 11. B's wait is over. B takes the GIL and writes its own current + 1, also 11."},{"t":7,"label":"7 ms","text":"Two deposits, but the balance went from 10 to 11: B wrote over A's update. That is a race."}],"cpus":2,"mem":[{"t":0,"text":"balance = 10"},{"t":6,"text":"balance = 11"},{"t":7,"text":"balance = 11"}],"local":{"A":[{"t":1,"text":"current = 10"}],"B":[{"t":2,"text":"current = 10"}]},"ref":null,"end":"Two deposits, balance 11: one update is lost."},"lock":{"title":"Lock: one thread at a time","sub":"The same deposits, with: with lock: current = balance, a wait, balance = current + 1.","unit":"ms","tmax":12,"axis":14,"tick":1,"lanes":["A","B"],"segs":[[0,"run",0,1],[0,"io",1,5],[0,"run",5,6],[1,"gil",0,1],[1,"lock",1,6],[1,"run",6,7],[1,"io",7,11],[1,"run",11,12]],"gil":[{"t":0,"who":"A"},{"t":1,"who":null},{"t":5,"who":"A"},{"t":6,"who":"B"},{"t":7,"who":null},{"t":11,"who":"B"},{"t":12,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"The same two deposits, with a lock around read, wait and write. A takes the lock and the GIL, and reads the balance: current = 10."},{"t":1,"label":"1 ms","text":"A starts to wait. It lets go of the GIL but keeps the lock. B gets the GIL, finds the lock taken, lets go of the GIL again and waits for the lock."},{"t":5,"label":"5 ms","text":"A's wait is over. A takes the GIL and writes current + 1, that is 11."},{"t":6,"label":"6 ms","text":"A has finished and lets go of the lock: the balance is 11. B takes the lock and the GIL, and reads the balance: current = 11."},{"t":7,"label":"7 ms","text":"B starts to wait. It lets go of the GIL and keeps the lock."},{"t":11,"label":"11 ms","text":"B's wait is over. B takes the GIL and writes current + 1, that is 12."},{"t":12,"label":"12 ms","text":"Balance 12: both updates count. The critical region ran one thread at a time, so the two deposits took 12 ms instead of 7 ms."}],"cpus":2,"mem":[{"t":0,"text":"balance = 10"},{"t":6,"text":"balance = 11"},{"t":12,"text":"balance = 12"}],"local":{"A":[{"t":1,"text":"current = 10"}],"B":[{"t":7,"text":"current = 11"}]},"lock":[{"t":0,"who":"A"},{"t":6,"who":"B"},{"t":12,"who":null}],"ref":null,"end":"Two deposits, balance 12, in 12 ms instead of 7 ms."}}};
+const DATA = {"key":"python-threads","page":"threads","labels":{"computing":"Computing","waiting":"Waiting","race":"Race","lock":"Lock"},"views":{"computing":{"title":"Computing: four threads, one GIL","sub":"Four threads run Python code. A thread needs the GIL to run it, and the process has one.","unit":"ms","tmax":80,"axis":90,"tick":10,"lanes":["A","B","C","D"],"segs":[[0,"run",0,5],[1,"gil",0,5],[2,"gil",0,10],[3,"gil",0,15],[0,"gil",5,20],[1,"run",5,10],[1,"gil",10,25],[2,"run",10,15],[2,"gil",15,30],[3,"run",15,20],[0,"run",20,25],[3,"gil",20,35],[0,"gil",25,40],[1,"run",25,30],[1,"gil",30,45],[2,"run",30,35],[2,"gil",35,50],[3,"run",35,40],[0,"run",40,45],[3,"gil",40,55],[0,"gil",45,60],[1,"run",45,50],[1,"gil",50,65],[2,"run",50,55],[2,"gil",55,70],[3,"run",55,60],[0,"run",60,65],[3,"gil",60,75],[1,"run",65,70],[2,"run",70,75],[3,"run",75,80]],"gil":[{"t":0,"who":"A"},{"t":5,"who":"B"},{"t":10,"who":"C"},{"t":15,"who":"D"},{"t":20,"who":"A"},{"t":25,"who":"B"},{"t":30,"who":"C"},{"t":35,"who":"D"},{"t":40,"who":"A"},{"t":45,"who":"B"},{"t":50,"who":"C"},{"t":55,"who":"D"},{"t":60,"who":"A"},{"t":65,"who":"B"},{"t":70,"who":"C"},{"t":75,"who":"D"},{"t":80,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"A, B, C and D start, each with 20 ms of Python code to run. A takes the GIL and runs. B, C and D wait for it."},{"t":5,"label":"5 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":10,"label":"10 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":15,"label":"15 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":20,"label":"20 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":25,"label":"25 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":30,"label":"30 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":35,"label":"35 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":40,"label":"40 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":45,"label":"45 ms","text":"A has used its 5 ms and lets go of the GIL. B takes the GIL and runs."},{"t":50,"label":"50 ms","text":"B has used its 5 ms and lets go of the GIL. C takes the GIL and runs."},{"t":55,"label":"55 ms","text":"C has used its 5 ms and lets go of the GIL. D takes the GIL and runs."},{"t":60,"label":"60 ms","text":"D has used its 5 ms and lets go of the GIL. A takes the GIL and runs."},{"t":65,"label":"65 ms","text":"A has finished. B takes the GIL and runs."},{"t":70,"label":"70 ms","text":"B has finished. C takes the GIL and runs."},{"t":75,"label":"75 ms","text":"C has finished. D takes the GIL and runs."},{"t":80,"label":"80 ms","text":"D has finished after 80 ms. One after the other, the same four tasks take 80 ms too. At every moment one thread ran Python code and the others waited for the GIL."}],"cpus":4,"mem":[{"t":0,"text":"the variables of the program, seen by all four threads"}],"ref":{"label":"One after the other","value":80},"end":"4 threads: 80 ms. One after the other: 80 ms. No gain, even with four CPUs."},"waiting":{"title":"Waiting: four threads, one GIL","sub":"A little Python code, a long wait for the network, a little Python code.","unit":"ms","tmax":25,"axis":90,"tick":10,"lanes":["A","B","C","D"],"segs":[[0,"run",0,1],[1,"gil",0,1],[2,"gil",0,2],[3,"gil",0,3],[0,"io",1,21],[1,"run",1,2],[1,"io",2,22],[2,"run",2,3],[2,"io",3,23],[3,"run",3,4],[3,"io",4,24],[0,"run",21,22],[1,"run",22,23],[2,"run",23,24],[3,"run",24,25]],"gil":[{"t":0,"who":"A"},{"t":1,"who":"B"},{"t":2,"who":"C"},{"t":3,"who":"D"},{"t":4,"who":null},{"t":21,"who":"A"},{"t":22,"who":"B"},{"t":23,"who":"C"},{"t":24,"who":"D"},{"t":25,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"A, B, C and D start, each with 1 ms of Python code, a wait of 20 ms for the network, and 1 ms of Python code. A takes the GIL and runs. B, C and D wait for it."},{"t":1,"label":"1 ms","text":"A starts to wait for the network and lets go of the GIL. B takes the GIL and runs."},{"t":2,"label":"2 ms","text":"B starts to wait for the network and lets go of the GIL. C takes the GIL and runs."},{"t":3,"label":"3 ms","text":"C starts to wait for the network and lets go of the GIL. D takes the GIL and runs."},{"t":4,"label":"4 ms","text":"D starts to wait for the network and lets go of the GIL. No thread needs the GIL now: all of them are waiting, and the waits overlap."},{"t":21,"label":"21 ms","text":"A's wait is over and it takes the GIL."},{"t":22,"label":"22 ms","text":"A has finished. B's wait is over and it takes the GIL."},{"t":23,"label":"23 ms","text":"B has finished. C's wait is over and it takes the GIL."},{"t":24,"label":"24 ms","text":"C has finished. D's wait is over and it takes the GIL."},{"t":25,"label":"25 ms","text":"All four threads have finished after 25 ms. One after the other, the same work takes 88 ms. The Python code took turns, but the waits overlapped: 3.5 times faster, with no extra CPU."}],"cpus":4,"mem":[{"t":0,"text":"the variables of the program, seen by all four threads"}],"ref":{"label":"One after the other","value":88},"end":"4 threads: 25 ms. One after the other: 88 ms. A thread that waits needs no GIL and no CPU."},"race":{"title":"Race: read, wait, write","sub":"Each thread makes one deposit: it reads the balance, waits, and writes the new value. No lock.","unit":"ms","tmax":7,"axis":14,"tick":1,"lanes":["A","B"],"segs":[[0,"read",0,1],[0,"io",1,5],[0,"write",5,6],[1,"gil",0,1],[1,"read",1,2],[1,"io",2,6],[1,"write",6,7]],"gil":[{"t":0,"who":"A"},{"t":1,"who":"B"},{"t":2,"who":null},{"t":5,"who":"A"},{"t":6,"who":"B"},{"t":7,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"Two deposits of 1. The balance is 10. A takes the GIL and reads the balance: current = 10."},{"t":1,"label":"1 ms","text":"A starts to wait and lets go of the GIL. B takes it and reads the balance: current = 10 too, because A has not written anything yet."},{"t":2,"label":"2 ms","text":"B starts to wait too. No thread needs the GIL now. Both threads hold current = 10."},{"t":5,"label":"5 ms","text":"A's wait is over. A takes the GIL and writes current + 1 to the balance: 11."},{"t":6,"label":"6 ms","text":"The balance is 11 and A has finished. B's wait is over. B takes the GIL and writes its own current + 1 to the balance: 11 again, over A's update."},{"t":7,"label":"7 ms","text":"Two deposits, but the balance went from 10 to 11: B wrote over A's update. That is a race."}],"cpus":2,"mem":[{"t":0,"text":"balance = 10"},{"t":6,"text":"balance = 11"},{"t":7,"text":"balance = 11"}],"local":{"A":[{"t":1,"text":"10"}],"B":[{"t":2,"text":"10"}]},"moves":[{"a":0,"b":1,"lane":0,"kind":"read","value":10},{"a":1,"b":2,"lane":1,"kind":"read","value":10},{"a":5,"b":6,"lane":0,"kind":"write","value":11},{"a":6,"b":7,"lane":1,"kind":"write","value":11}],"code":["current = balance","time.sleep(0)","balance = current + 1"],"line":{"gil":0,"read":0,"io":1,"write":2},"ref":null,"end":"Two deposits, balance 11: one update is lost."},"lock":{"title":"Lock: one thread at a time","sub":"The same two deposits, with read, wait and write inside: with lock:","unit":"ms","tmax":12,"axis":14,"tick":1,"lanes":["A","B"],"segs":[[0,"read",0,1],[0,"io",1,5],[0,"write",5,6],[1,"gil",0,1],[1,"lock",1,6],[1,"read",6,7],[1,"io",7,11],[1,"write",11,12]],"gil":[{"t":0,"who":"A"},{"t":1,"who":null},{"t":5,"who":"A"},{"t":6,"who":"B"},{"t":7,"who":null},{"t":11,"who":"B"},{"t":12,"who":null}],"steps":[{"t":0,"label":"0 ms","text":"The same two deposits, with a lock around read, wait and write. A takes the lock and the GIL, and reads the balance: current = 10."},{"t":1,"label":"1 ms","text":"A starts to wait. It lets go of the GIL but keeps the lock. B gets the GIL, finds the lock taken, lets go of the GIL again and waits for the lock."},{"t":5,"label":"5 ms","text":"A's wait is over. A takes the GIL and writes current + 1 to the balance: 11."},{"t":6,"label":"6 ms","text":"The balance is 11. A has finished and lets go of the lock. B takes the lock and the GIL, and reads the balance: current = 11."},{"t":7,"label":"7 ms","text":"B starts to wait. It lets go of the GIL and keeps the lock."},{"t":11,"label":"11 ms","text":"B's wait is over. B takes the GIL and writes current + 1 to the balance: 12."},{"t":12,"label":"12 ms","text":"Balance 12: both updates count. The critical region ran one thread at a time, so the two deposits took 12 ms instead of 7 ms."}],"cpus":2,"mem":[{"t":0,"text":"balance = 10"},{"t":6,"text":"balance = 11"},{"t":12,"text":"balance = 12"}],"local":{"A":[{"t":1,"text":"10"}],"B":[{"t":7,"text":"11"}]},"moves":[{"a":0,"b":1,"lane":0,"kind":"read","value":10},{"a":5,"b":6,"lane":0,"kind":"write","value":11},{"a":6,"b":7,"lane":1,"kind":"read","value":11},{"a":11,"b":12,"lane":1,"kind":"write","value":12}],"lock":[{"t":0,"who":"A"},{"t":6,"who":"B"},{"t":12,"who":null}],"code":["with lock:","    current = balance","    time.sleep(0)","    balance = current + 1"],"line":{"gil":0,"lock":0,"read":1,"io":2,"write":3},"ref":null,"end":"Two deposits, balance 12, in 12 ms instead of 7 ms."}}};
 
 // ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
 const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
@@ -229,7 +229,7 @@ function latest(list, t) {
 // ---- the page's views and drawing (one file per page) ----
 // Threads and processes: the two pages of Lecture 15, replayed from DATA.views.
 const gx0 = 170, gx1 = 1210;
-const STATE = { run: "runs Python code", gil: "waits for the GIL", io: "waits", lock: "waits for the lock", done: "finished", share: "shares a core" };
+const STATE = { run: "runs Python code", read: "reads the balance", write: "writes the balance", gil: "waits for the GIL", io: "waits", lock: "waits for the lock", done: "finished", share: "shares a core" };
 const edge = i => "ABCD"[i % 4];
 const X = (v, t) => gx0 + Math.min(t, v.axis) / v.axis * (gx1 - gx0);
 const fmtT = (v, t) => v.unit === "s" ? `${t.toFixed(2)} s` : v.unit === "us" ? `${t.toFixed(0)} us` : `${t.toFixed(1)} ms`;
@@ -265,7 +265,8 @@ function chart(v, t, y0) {
   for (const s of v.segs) {
     if (s[2] > t + EPS) continue;
     const x0 = X(v, s[2]), x1 = X(v, Math.min(s[3], t)), y = rowY(s[0]), key = edge(s[0]);
-    if (s[1] === "run") rect(x0, y, x1 - x0, rowH, { fill: JOB[key] });
+    if (s[1] === "run" || s[1] === "read") rect(x0, y, x1 - x0, rowH, { fill: JOB[key] });
+    else if (s[1] === "write") rect(x0, y, x1 - x0, rowH, { fill: JOB_EDGE[key], alpha: 0.6 });
     else if (s[1] === "share") rect(x0, y + 0, x1 - x0, rowH, { fill: JOB[key], alpha: 0.55 });
     else if (s[1] === "gil") rect(x0, y + rowH * 0.36, x1 - x0, rowH * 0.28, { fill: GRID });
     else if (s[1] === "lock") rect(x0, y + rowH * 0.3, x1 - x0, rowH * 0.4, { fill: "#d9d8d2", stroke: AXIS });
@@ -274,6 +275,8 @@ function chart(v, t, y0) {
       const k = s[0] === 0 ? 0 : 1;
       rect(x0, y + 2, Math.max(x1 - x0 - 2, 0.5), rowH - 4, { fill: JOB["AB"[k]] });
     }
+    if ((s[1] === "read" || s[1] === "write" || (s[1] === "io" && v.local)) && x1 - x0 > 44)
+      text((x0 + x1) / 2, y + rowH / 2, s[1] === "io" ? "wait" : s[1], { fs: 12, ha: "center", mono: true });
     if (s[4] && v.unit === "s" && t > s[2] + EPS) text(Math.min(x0 + 10, x1), y + rowH / 2, `task ${s[4]}`, { fs: 11.5, color: INK_2, alpha: x1 - x0 > 56 ? 1 : 0 });
   }
   if (v.segs.some(s => s[2] <= t + EPS && t < v.tmax)) line(X(v, t), top - 5, X(v, t), bottom + 5, { color: ORANGE, lw: 1.2 });
@@ -290,7 +293,8 @@ function chart(v, t, y0) {
 }
 function legend(items, x, y) {
   for (const [kind, label] of items) {
-    if (kind === "run") rect(x, y - 7, 24, 14, { fill: JOB.A });
+    if (kind === "run" || kind === "read") rect(x, y - 7, 24, 14, { fill: JOB.A });
+    else if (kind === "write") rect(x, y - 7, 24, 14, { fill: JOB_EDGE.A, alpha: 0.6 });
     else if (kind === "share") rect(x, y - 7, 24, 14, { fill: JOB.A, alpha: 0.55 });
     else if (kind === "gil") rect(x, y - 3, 24, 6, { fill: GRID });
     else if (kind === "lock") rect(x, y - 4, 24, 8, { fill: "#d9d8d2", stroke: AXIS });
@@ -301,54 +305,116 @@ function legend(items, x, y) {
 }
 
 // ---- threads: one process, one memory, one GIL ----
+const running = st => st === "run" || st === "read" || st === "write";
+
+function cpuPanel(v, t, by, bh) {
+  const cx = 872, cw2 = 348;
+  rect(cx, by, cw2, bh, { fill: "#ffffff", stroke: AXIS, lw: 1.2, rx: 10 });
+  text(cx + 18, by + 22, `CPUs of the job`, { fs: 14, bold: true });
+  const cc = v.cpus, side = 72, gp = (cw2 - 36 - cc * side) / (cc - 1);
+  v.lanes.forEach((name, i) => {
+    const x = cx + 18 + i * (side + gp), y = by + 80, on = running(laneState(v, i, t));
+    rect(x, y, side, side, { fill: on ? JOB[name] : "#ffffff", stroke: on ? JOB_EDGE[name] : AXIS, lw: on ? 1.6 : 1 });
+    text(x + side / 2, y + side + 16, `CPU ${i}`, { fs: 12, ha: "center", color: INK_2 });
+    if (on) text(x + side / 2, y + side / 2, name, { fs: 18, ha: "center", bold: true });
+  });
+  const busy = v.lanes.filter((_, i) => running(laneState(v, i, t))).length;
+  text(cx + 18, by + bh - 24, `${busy} of ${cc} busy`, { fs: 13, color: INK_2 });
+}
+
+function freeGil(x, y) {
+  rect(x, y, 52, 26, { stroke: ORANGE, rx: 5, dash: "5 3" });
+  text(x + 26, y + 13, "GIL", { fs: 13, ha: "center", color: ORANGE, bold: true });
+  text(x - 10, y + 13, "free", { fs: 12.5, ha: "right", color: INK_2 });
+}
+
 function drawThreads(v, t) {
   header(v, t);
   const n = v.lanes.length, bx = 60, by = 112, bw = 790, bh = 236;
   rect(bx, by, bw, bh, { fill: "#ffffff", stroke: AXIS, lw: 1.2, rx: 10 });
   text(bx + 18, by + 22, "One process", { fs: 14, bold: true });
-  const who = (latest(v.gil, t) || {}).who, cw = n > 2 ? 174 : 266, gap = 14, x0 = bx + 18;
-  const lockWho = v.lock ? (latest(v.lock, t) || {}).who : null;
+  const who = (latest(v.gil, t) || {}).who, cw = 174, gap = 14, x0 = bx + 18;
   v.lanes.forEach((name, i) => {
     const x = x0 + i * (cw + gap), y = by + 76, st = laneState(v, i, t), on = st === "run";
     rect(x, y, cw, 74, { fill: on ? JOB[name] : "#ffffff", stroke: on ? JOB_EDGE[name] : AXIS, lw: on ? 1.6 : 1, rx: 6 });
     text(x + cw / 2, y + 22, `Thread ${name}`, { fs: 14, ha: "center", bold: true });
-    text(x + cw / 2, y + 48, st === "io" ? (v.local ? "waits" : "waits for the network") : STATE[st], { fs: 12.5, ha: "center", color: INK_2 });
-    if (v.local) { const l = latest(v.local[name], t); if (l) text(x + cw / 2, y + 90, l.text, { fs: 12.5, ha: "center", mono: true }); }
+    text(x + cw / 2, y + 48, st === "io" ? "waits for the network" : STATE[st], { fs: 12.5, ha: "center", color: INK_2 });
     if (who === name) {
-      rect(x + cw / 2 - 40, y - 34, 52, 26, { fill: ORANGE, rx: 5 });
-      text(x + cw / 2 - 14, y - 21, "GIL", { fs: 13, ha: "center", color: "#ffffff", bold: true });
-    }
-    if (lockWho === name) {
-      rect(x + cw / 2 + 18, y - 34, 56, 26, { fill: "#ffffff", stroke: INK_2, rx: 5 });
-      text(x + cw / 2 + 46, y - 21, "lock", { fs: 13, ha: "center" });
+      rect(x + cw / 2 - 26, y - 34, 52, 26, { fill: ORANGE, rx: 5 });
+      text(x + cw / 2, y - 21, "GIL", { fs: 13, ha: "center", color: "#ffffff", bold: true });
     }
   });
-  if (who === null) {
-    rect(bx + bw - 76, by + 10, 52, 26, { stroke: ORANGE, rx: 5, dash: "5 3" });
-    text(bx + bw - 50, by + 23, "GIL", { fs: 13, ha: "center", color: ORANGE, bold: true });
-    text(bx + bw - 86, by + 23, "free", { fs: 12.5, ha: "right", color: INK_2 });
-  }
-  const m = latest(v.mem, t), my = by + bh - 56 + (v.local ? 12 : 0);
+  if (who === null) freeGil(bx + bw - 76, by + 10);
+  const m = latest(v.mem, t), my = by + bh - 56;
   rect(x0, my, bw - 36, 38, { fill: "#f3f2ee", stroke: AXIS, rx: 6 });
   text(x0 + 14, my + 19, "Shared memory:", { fs: 12.5, color: INK_2 });
-  text(x0 + 172, my + 19, m.text, { fs: 13, mono: m.text.startsWith("balance") });
-  // the CPUs
-  const cx = 872, cy = by, cw2 = 348;
-  rect(cx, cy, cw2, bh, { fill: "#ffffff", stroke: AXIS, lw: 1.2, rx: 10 });
-  text(cx + 18, cy + 22, `CPUs of the job`, { fs: 14, bold: true });
-  const cc = v.cpus, side = 72, gp = (cw2 - 36 - cc * side) / (cc - 1);
-  v.lanes.forEach((name, i) => {
-    const x = cx + 18 + i * (side + gp), y = cy + 80, on = laneState(v, i, t) === "run";
-    rect(x, y, side, side, { fill: on ? JOB[name] : "#ffffff", stroke: on ? JOB_EDGE[name] : AXIS, lw: on ? 1.6 : 1 });
-    text(x + side / 2, y + side + 16, `CPU ${i}`, { fs: 12, ha: "center", color: INK_2 });
-    if (on) text(x + side / 2, y + side / 2, name, { fs: 18, ha: "center", bold: true });
-  });
-  const busy = v.lanes.filter((_, i) => laneState(v, i, t) === "run").length;
-  text(cx + 18, cy + bh - 24, `${busy} of ${cc} busy`, { fs: 13, color: INK_2 });
+  text(x0 + 172, my + 19, m.text, { fs: 13 });
+  cpuPanel(v, t, by, bh);
   const yy = chart(v, t, 374);
-  legend(v.lock ? [["run", "runs Python code"], ["gil", "waits for the GIL"], ["lock", "waits for the lock"], ["io", "waits"]]
-    : v.local ? [["run", "runs Python code"], ["gil", "waits for the GIL"], ["io", "waits"]]
-    : [["run", "runs Python code"], ["gil", "waits for the GIL"], ["io", "waits for the network"]], gx0, yy + 26);
+  legend([["run", "runs Python code"], ["gil", "waits for the GIL"], ["io", "waits for the network"]], gx0, yy + 26);
+  if (t >= v.tmax - EPS) text(60, yy + 62, v.end, { fs: 16 });
+}
+
+// ---- race and lock: every read and every write goes between a thread and the shared balance ----
+function arrowHead(x, y, dir, color) {
+  const d = dir * 11;
+  out.push(`<polygon points="${x},${y} ${x - 7},${y - d} ${x + 7},${y - d}" fill="${color}"/>`);
+}
+
+function drawDeposits(v, t) {
+  header(v, t);
+  const bx = 60, by = 112, bw = 790, bh = 300, cw = 370, gap = 14, x0 = bx + 18, ty = by + 34, th = 150, my = by + 252;
+  rect(bx, by, bw, bh, { fill: "#ffffff", stroke: AXIS, lw: 1.2, rx: 10 });
+  text(bx + 18, by + 18, "One process", { fs: 14, bold: true });
+  const who = (latest(v.gil, t) || {}).who, lockWho = v.lock ? (latest(v.lock, t) || {}).who : null;
+  v.lanes.forEach((name, i) => {
+    const x = x0 + i * (cw + gap), st = laneState(v, i, t), on = running(st);
+    rect(x, ty, cw, th, { fill: "#ffffff", stroke: on ? JOB_EDGE[name] : AXIS, lw: on ? 1.6 : 1, rx: 6 });
+    text(x + 12, ty + 15, `Thread ${name}`, { fs: 14, bold: true });
+    text(x + 112, ty + 15, { read: "reads", write: "writes", io: "waits" }[st] || STATE[st], { fs: 12.5, color: INK_2 });
+    // the code, with the line this thread is on
+    const hit = st === "done" ? -1 : v.line[st], lh = v.code.length > 3 ? 26 : 32, ly = ty + (v.code.length > 3 ? 46 : 52);
+    v.code.forEach((src, k) => {
+      if (k === hit) rect(x + 8, ly + k * lh - lh / 2 + 1, 262, lh - 2, { fill: running(st) ? JOB[name] : st === "io" ? "#ffffff" : GRID, stroke: st === "io" ? JOB_EDGE[name] : "none", dash: st === "io" ? "6 4" : null });
+      text(x + 14, ly + k * lh, src, { fs: 12, mono: true, color: k === hit ? INK : INK_2 });
+    });
+    // this thread's own variable
+    const l = latest(v.local[name], t);
+    rect(x + cw - 92, ty + 56, 82, 72, { fill: "#ffffff", stroke: AXIS, rx: 5 });
+    text(x + cw - 51, ty + 74, "current", { fs: 11, ha: "center", color: INK_2, mono: true });
+    text(x + cw - 51, ty + 104, l ? l.text : "", { fs: 18, ha: "center", mono: true, bold: true });
+    // GIL and lock travel with their holder
+    if (who === name) {
+      rect(x + cw - 60, ty + 5, 50, 24, { fill: ORANGE, rx: 5 });
+      text(x + cw - 35, ty + 17, "GIL", { fs: 12.5, ha: "center", color: "#ffffff", bold: true });
+    }
+    if (lockWho === name) {
+      rect(x + cw - 118, ty + 5, 50, 24, { fill: "#ffffff", stroke: INK_2, rx: 5 });
+      text(x + cw - 93, ty + 17, "lock", { fs: 12.5, ha: "center" });
+    }
+  });
+  if (who === null) freeGil(bx + bw - 76, by + 6);
+  const m = latest(v.mem, t), yb = ty + th;
+  rect(x0, my, bw - 36, 34, { fill: "#f3f2ee", stroke: AXIS, rx: 6 });
+  text(x0 + 14, my + 17, "Shared memory:", { fs: 12.5, color: INK_2 });
+  text(x0 + 172, my + 17, m.text, { fs: 14, mono: true, bold: true });
+  // the value on its way: from the balance to a thread (read) or from a thread to the balance (write)
+  for (const mv of v.moves) {
+    if (!(mv.a <= t + EPS && t < mv.b - EPS)) continue;
+    const name = v.lanes[mv.lane], ax = x0 + mv.lane * (cw + gap) + cw - 51, f = (t - mv.a) / (mv.b - mv.a), rd = mv.kind === "read";
+    const y0 = rd ? my : yb, y1 = rd ? yb : my, edgeC = JOB_EDGE[name];
+    line(ax, y0, ax, y1 + (rd ? 11 : -11), { color: edgeC, lw: 1.8 });
+    arrowHead(ax, y1, rd ? -1 : 1, edgeC);
+    const ty2 = y0 + (y1 - y0) * f;
+    rect(ax - 134, Math.min(y0, y1) + 17, 114, 34, { fill: JOB[name], stroke: edgeC, rx: 5 });
+    text(ax - 77, Math.min(y0, y1) + 34, `${mv.kind} ${mv.value}`, { fs: 14, ha: "center", mono: true, bold: true });
+    rect(ax - 7, ty2 - 7, 14, 14, { fill: edgeC, rx: 3 });
+  }
+  cpuPanel(v, t, by, bh);
+  const yy = chart(v, t, 434);
+  const items = [["read", "read"], ["write", "write"], ["io", "wait"], ["gil", "waits for the GIL"]];
+  if (v.lock) items.push(["lock", "waits for the lock"]);
+  legend(items, gx0, yy + 26);
   if (t >= v.tmax - EPS) text(60, yy + 62, v.end, { fs: 16 });
 }
 
@@ -431,7 +497,7 @@ const VIEWS = Object.keys(DATA.views).map(id => {
   const speeds = isT ? (v.tmax < 20 ? [0.25, 0.5, 1, 1.5, 2, 3, 4] : MS_SPEEDS.threads) : v.tiny ? MS_SPEEDS.tiny : MS_SPEEDS.pool;
   return {
     id, label: DATA.labels[id], tmax: v.tmax, snap: v.unit === "s" ? 0.01 : v.unit === "us" ? 1 : 0.1, unit: v.unit, speeds, speed: 2, video: "",
-    draw: t => (isT ? drawThreads : v.tiny ? drawTiny : drawProcesses)(v, t),
+    draw: t => (v.moves ? drawDeposits : isT ? drawThreads : v.tiny ? drawTiny : drawProcesses)(v, t),
     seek: x => Math.min(Math.max((x - gx0) / (gx1 - gx0) * v.axis, 0), v.tmax),
   };
 });
