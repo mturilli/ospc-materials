@@ -13,7 +13,7 @@ Material for the Operating Systems and Parallel Computing course: the interactiv
 - [Compute or move?](https://mturilli.github.io/ospc-materials/animations/compute-or-move.html): operations per second against operations per byte, measured on our cluster. See why `a @ a` runs 200 times faster than `a + b` on the same CPUs, and where the GPU's limits sit, with and without the copies.
 - [Waiting in the Slurm queue](https://mturilli.github.io/ospc-materials/animations/slurm-queue.html): jobs arrive, wait and start on a small partition. See why a job that asks for the CPUs it uses, with an honest time limit, starts sooner and lets other jobs start sooner too.
 - [Threads in Python, step by step](https://mturilli.github.io/ospc-materials/animations/python-threads.html): four threads in one process, with one GIL. See why threads help when a program waits and not when it computes, and how a wait between read and write loses an update.
-- [A pool of processes, step by step](https://mturilli.github.io/ospc-materials/animations/python-processes.html): workers with their own memory and their own GIL, on the cores of a job, measured on our cluster. See what a pool does with four tasks, why 4 CPUs are 2 cores, and what many tiny tasks cost.
+- [A pool of processes, step by step](https://mturilli.github.io/ospc-materials/animations/python-processes.html): workers with their own memory and their own GIL, on the cores of a job, measured on our cluster. See what a pool does with data and compute tasks, what big arrays and tiny tasks cost, why 4 CPUs are 2 cores, and where Linux puts the workers.
 
 Each animation is a single HTML file with no dependencies. Open the link, or download the file and open it in a browser. It also works offline.
 
