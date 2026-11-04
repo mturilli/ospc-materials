@@ -12,8 +12,16 @@ Material for the Operating Systems and Parallel Computing course: the interactiv
 - [When does the GPU pay off?](https://mturilli.github.io/ospc-materials/animations/gpu-offload.html): copy the data to the GPU, compute, copy the result back, and compare with the same work on the CPU, measured on our cluster. See from what size a matrix product pays off, why adding two arrays does not, and what changes when the data stays on the GPU.
 - [Compute or move?](https://mturilli.github.io/ospc-materials/animations/compute-or-move.html): operations per second against operations per byte, measured on our cluster. See why `a @ a` runs 200 times faster than `a + b` on the same CPUs, and where the GPU's limits sit, with and without the copies.
 - [Waiting in the Slurm queue](https://mturilli.github.io/ospc-materials/animations/slurm-queue.html): jobs arrive, wait and start on a small partition. See why a job that asks for the CPUs it uses, with an honest time limit, starts sooner and lets other jobs start sooner too.
+- [Threads in Python, step by step](https://mturilli.github.io/ospc-materials/animations/python-threads.html): four threads in one process, with one GIL. See why threads help when a program waits and not when it computes, and how a wait between read and write loses an update.
+- [A pool of processes, step by step](https://mturilli.github.io/ospc-materials/animations/python-processes.html): workers with their own memory and their own GIL, on the cores of a job, measured on our cluster. See what a pool does with four tasks, why 4 CPUs are 2 cores, and what many tiny tasks cost.
 
 Each animation is a single HTML file with no dependencies. Open the link, or download the file and open it in a browser. It also works offline.
+
+## Notebooks
+
+Notebooks we run in class on the cluster, in the kernel OSPC (Python 3.12). In JupyterLab, open a terminal (File > New > Terminal) and download the notebook with `curl -O` followed by its link.
+
+- [Threads and processes in Python](https://mturilli.github.io/ospc-materials/notebooks/threads-processes.ipynb): start threads and processes by hand, see what they share, compare them in batch jobs with `sbatch`, then lose updates in a race and fix it with a lock.
 
 ## Lab 1: The Nightly Report
 
