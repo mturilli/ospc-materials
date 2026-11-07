@@ -14,6 +14,8 @@ Material for the Operating Systems and Parallel Computing course: the interactiv
 - [Waiting in the Slurm queue](https://mturilli.github.io/ospc-materials/animations/slurm-queue.html): jobs arrive, wait and start on a small partition. See why a job that asks for the CPUs it uses, with an honest time limit, starts sooner and lets other jobs start sooner too.
 - [Threads in Python, step by step](https://mturilli.github.io/ospc-materials/animations/python-threads.html): four threads in one process, with one GIL. See why threads help when a program waits and not when it computes, and how a wait between read and write loses an update.
 - [A pool of processes, step by step](https://mturilli.github.io/ospc-materials/animations/python-processes.html): workers with their own memory and their own GIL, on the cores of a job, measured on our cluster. See what a pool does with data and compute tasks, what big arrays and tiny tasks cost, why 4 CPUs are 2 cores, and where Linux puts the workers.
+- [How much faster? Scaling, step by step](https://mturilli.github.io/ospc-materials/animations/scaling.html): one program with 1 to 32 workers, measured on our cluster. See how far the speedup goes, why Amdahl's law stops it, what happens when every worker reads from the same memory, and what weak scaling measures.
+- [Threads inside the libraries, step by step](https://mturilli.github.io/ospc-materials/animations/library-threads.html): one matrix product split among threads, then a pool of workers that each start threads of their own, measured on our cluster. See why 4 workers with 4 threads each on 4 CPUs run several times slower, and why small products suffer most.
 
 Each animation is a single HTML file with no dependencies. Open the link, or download the file and open it in a browser. It also works offline.
 
@@ -22,6 +24,8 @@ Each animation is a single HTML file with no dependencies. Open the link, or dow
 Notebooks we run in class on the cluster, in the kernel OSPC (Python 3.12). In JupyterLab, open a terminal (File > New > Terminal) and download the notebook with `curl -O` followed by its link.
 
 - [Threads and processes in Python](https://mturilli.github.io/ospc-materials/notebooks/threads-processes.ipynb): start threads and processes by hand, see what they share, compare them in batch jobs with `sbatch`, then lose updates in a race and fix it with a lock.
+- [How much faster?](https://mturilli.github.io/ospc-materials/notebooks/scaling.ipynb): run one program with 1 to 32 workers in a batch job, compute speedup and efficiency, compare them with Amdahl's law, and see what changes when the tasks read from memory and when the problem grows with the workers.
+- [Threads inside the libraries](https://mturilli.github.io/ospc-materials/notebooks/library-threads.ipynb): find out which NumPy calls use threads, see and set the threads of NumPy and scikit-learn, and measure what happens when a pool of processes meets a library that starts threads in every worker.
 
 ## Lab 1: The Nightly Report
 

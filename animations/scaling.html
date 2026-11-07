@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>How Much Faster? Scaling, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>How Much Faster? Scaling, Step by Step</h1>
+      <p>One program, measured on our cluster with 1 to 32 workers: one worker prepares the data, then a pool of workers runs the tasks. Where does the time go, and how close do we get to Amdahl's law?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>4</kbd> to change view. Click a timeline to jump to that moment.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements</h2>
+    <p><b>Where.</b> haskell, a node of our cluster (AMD EPYC 9755), one batch job with 64 CPUs (32 cores), 7 November 2026. Every time is the median of 5 runs; the runs differ by a few percent.</p>
+    <p><b>The program.</b> One worker builds and sorts 40 million order values (about 1 s). Then a <code>ProcessPoolExecutor</code> with n workers runs the tasks. <i>Compute</i> tasks draw random numbers on small arrays that fit in the core's cache (640 tasks). <i>Data</i> tasks each average a million orders picked at random from the 320 MB array (1280 tasks). The same program is in the notebook of Session 23.</p>
+    <p><b>Speedup</b> is the time with one worker divided by the time with n workers; <b>efficiency</b> is the speedup divided by n. <b>Amdahl's law</b> uses s = the prepare time divided by the total time with one worker.</p>
+    <p><b>Weak scaling</b> gives every worker 20 compute tasks (or 40 data tasks), so the problem grows with the workers. The chart shows the pool time; the prepare step does not grow.</p>
+    <p>Data files: scaling2-27681.out (compute) and scaling-27680.out (data), lecture16/measure.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"scaling","sizes":[1,2,4,8,16,32],"strong":{"compute":[{"n":1,"prepare":0.991,"pool":10.399,"total":11.384,"tasks":640,"runs":5},{"n":2,"prepare":0.979,"pool":5.218,"total":6.204,"tasks":640,"runs":5},{"n":4,"prepare":0.978,"pool":2.624,"total":3.604,"tasks":640,"runs":5},{"n":8,"prepare":0.992,"pool":1.333,"total":2.321,"tasks":640,"runs":5},{"n":16,"prepare":0.985,"pool":0.834,"total":1.825,"tasks":640,"runs":5},{"n":32,"prepare":0.983,"pool":0.503,"total":1.485,"tasks":640,"runs":5}],"data":[{"n":1,"prepare":1.009,"pool":13.112,"total":14.121,"tasks":1280,"runs":5},{"n":2,"prepare":1.007,"pool":6.78,"total":7.795,"tasks":1280,"runs":5},{"n":4,"prepare":1.007,"pool":3.549,"total":4.553,"tasks":1280,"runs":5},{"n":8,"prepare":1.008,"pool":2.252,"total":3.261,"tasks":1280,"runs":5},{"n":16,"prepare":1.005,"pool":2.062,"total":3.053,"tasks":1280,"runs":5},{"n":32,"prepare":1.026,"pool":2.018,"total":3.067,"tasks":1280,"runs":5}]},"weak":{"compute":[{"n":1,"prepare":1.06,"pool":0.328,"total":1.389,"tasks":20,"runs":5},{"n":2,"prepare":1.063,"pool":0.329,"total":1.392,"tasks":40,"runs":5},{"n":4,"prepare":1.058,"pool":0.334,"total":1.398,"tasks":80,"runs":5},{"n":8,"prepare":1.063,"pool":0.341,"total":1.404,"tasks":160,"runs":5},{"n":16,"prepare":1.057,"pool":0.422,"total":1.433,"tasks":320,"runs":5},{"n":32,"prepare":1.059,"pool":0.501,"total":1.555,"tasks":640,"runs":5}],"data":[{"n":1,"prepare":0.989,"pool":0.435,"total":1.434,"tasks":40,"runs":5},{"n":2,"prepare":0.981,"pool":0.46,"total":1.453,"tasks":80,"runs":5},{"n":4,"prepare":0.984,"pool":0.482,"total":1.467,"tasks":160,"runs":5},{"n":8,"prepare":0.979,"pool":0.619,"total":1.603,"tasks":320,"runs":5},{"n":16,"prepare":0.98,"pool":1.174,"total":2.153,"tasks":640,"runs":5},{"n":32,"prepare":0.981,"pool":1.864,"total":2.857,"tasks":1280,"runs":5}]},"s":{"compute":0.08705200281096274,"data":0.07145386304086111},"views":{"strong":{"steps":[{"t":0,"n":1,"rows":[["Workers","1","640 compute tasks, each on small arrays in the core's cache.",true],["Prepare","0.99 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","10.40 s","The tasks, run by the pool.",true],["Speedup","1.00","Time with one worker divided by time with n workers.",true]],"label":"1 worker"},{"t":1,"n":2,"rows":[["Workers","2","The same 640 tasks, now shared by 2 workers.",true],["Prepare","0.98 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","5.22 s","2.0 times shorter than with one worker.",true],["Speedup","1.83","Efficiency 0.92: 92% of the ideal speedup of 2.",true]],"label":"2 workers"},{"t":2,"n":4,"rows":[["Workers","4","The same 640 tasks, now shared by 4 workers.",true],["Prepare","0.98 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","2.62 s","4.0 times shorter than with one worker.",true],["Speedup","3.16","Efficiency 0.79: 79% of the ideal speedup of 4.",true]],"label":"4 workers"},{"t":3,"n":8,"rows":[["Workers","8","The same 640 tasks, now shared by 8 workers.",true],["Prepare","0.99 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","1.33 s","7.8 times shorter than with one worker.",true],["Speedup","4.90","Efficiency 0.61: 61% of the ideal speedup of 8.",true]],"label":"8 workers"},{"t":4,"n":16,"rows":[["Workers","16","The same 640 tasks, now shared by 16 workers.",true],["Prepare","0.98 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","0.83 s","12.5 times shorter than with one worker.",true],["Speedup","6.24","Efficiency 0.39: 39% of the ideal speedup of 16.",true]],"label":"16 workers"},{"t":5,"n":32,"rows":[["Workers","32","The same 640 tasks, now shared by 32 workers.",true],["Prepare","0.98 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","0.50 s","20.7 times shorter than with one worker.",true],["Speedup","7.67","Efficiency 0.24: 24% of the ideal speedup of 32.",true],["","","Not 32 times faster: 7.7. Why? See the next view.",true]],"label":"32 workers"}]},"amdahl":{"steps":[{"rows":[["Serial","8.7%","With one worker, prepare takes 0.99 s of 11.38 s: the serial part s = 8.7%.",true],["Parallel","91.3%","The pool, which n workers can share.",true]],"show":1,"curves":[],"t":0,"label":"the serial part"},{"rows":[["Law","","With n workers the time is s + (1 − s) / n of the time with one worker, so the speedup is S(n) = 1 / (s + (1 − s) / n).",true],["Limit","11.5","However many workers we add, the serial part stays: S can never pass 1 / s = 11.5.",true]],"show":1,"curves":[0.08705200281096274],"t":1,"label":"Amdahl's law"},{"rows":[["Workers","2","Measured 1.83, Amdahl 1.84.",true],["Gap","0.00","Measured and predicted are close.",true]],"show":2,"curves":[0.08705200281096274],"t":2,"label":"2 workers"},{"rows":[["Workers","4","Measured 3.16, Amdahl 3.17.",true],["Gap","0.01","Measured and predicted are close.",true]],"show":4,"curves":[0.08705200281096274],"t":3,"label":"4 workers"},{"rows":[["Workers","8","Measured 4.90, Amdahl 4.97.",true],["Gap","0.07","Measured and predicted are close.",true]],"show":8,"curves":[0.08705200281096274],"t":4,"label":"8 workers"},{"rows":[["Workers","16","Measured 6.24, Amdahl 6.94.",true],["Gap","0.70","Overhead: starting the workers, handing out the tasks, waiting for the last one.",true]],"show":16,"curves":[0.08705200281096274],"t":5,"label":"16 workers"},{"rows":[["Workers","32","Measured 7.67, Amdahl 8.65.",true],["Gap","0.99","Overhead: starting the workers, handing out the tasks, waiting for the last one.",true]],"show":32,"curves":[0.08705200281096274],"t":6,"label":"32 workers"},{"rows":[["Other s","1, 5, 25%","Limits of 100, 20 and 4: a small serial part caps the speedup early.",true]],"show":32,"curves":[0.08705200281096274,0.01,0.05,0.25],"t":7,"label":"other serial parts"}]},"shared":{"steps":[{"t":0,"n":1,"rows":[["Workers","1","1280 data tasks, each reading a million orders at random from memory.",true],["Prepare","1.01 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","13.11 s","The tasks, run by the pool.",true],["Speedup","1.00","Time with one worker divided by time with n workers.",true],["Amdahl","1.00","Amdahl's law with s = 7.1% predicts 1.00.",false]],"label":"1 worker"},{"t":1,"n":2,"rows":[["Workers","2","The same 1280 tasks, now shared by 2 workers.",true],["Prepare","1.01 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","6.78 s","1.9 times shorter than with one worker.",true],["Speedup","1.81","Efficiency 0.91: 91% of the ideal speedup of 2.",true],["Amdahl","1.87","Amdahl's law with s = 7.1% predicts 1.87.",true]],"label":"2 workers"},{"t":2,"n":4,"rows":[["Workers","4","The same 1280 tasks, now shared by 4 workers.",true],["Prepare","1.01 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","3.55 s","3.7 times shorter than with one worker.",true],["Speedup","3.10","Efficiency 0.78: 78% of the ideal speedup of 4.",true],["Amdahl","3.29","Amdahl's law with s = 7.1% predicts 3.29.",true]],"label":"4 workers"},{"t":3,"n":8,"rows":[["Workers","8","The same 1280 tasks, now shared by 8 workers.",true],["Prepare","1.01 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","2.25 s","5.8 times shorter than with one worker.",true],["Speedup","4.33","Efficiency 0.54: 54% of the ideal speedup of 8.",true],["Amdahl","5.33","Amdahl's law with s = 7.1% predicts 5.33.",true]],"label":"8 workers"},{"t":4,"n":16,"rows":[["Workers","16","The same 1280 tasks, now shared by 16 workers.",true],["Prepare","1.00 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","2.06 s","6.4 times shorter than with one worker.",true],["Speedup","4.63","Efficiency 0.29: 29% of the ideal speedup of 16.",true],["Amdahl","7.72","Amdahl's law with s = 7.1% predicts 7.72.",true]],"label":"16 workers"},{"t":5,"n":32,"rows":[["Workers","32","The same 1280 tasks, now shared by 32 workers.",true],["Prepare","1.03 s","One worker builds and sorts the orders. More workers do not help here.",true],["Pool","2.02 s","6.5 times shorter than with one worker.",true],["Speedup","4.60","Efficiency 0.14: 14% of the ideal speedup of 32.",true],["Amdahl","9.95","Amdahl's law with s = 7.1% predicts 9.95.",true],["","","From 8 workers on, the pool time stops shrinking: all the workers read from the same memory.",true]],"label":"32 workers"}]},"weak":{"steps":[{"t":0,"n":1,"rows":[["Workers","1","20 compute tasks and 40 data tasks: the problem grows with the workers.",true],["compute","0.33 s","Pool time. Ideal: the same at every size.",true],["data","0.43 s","Pool time.",true]],"label":"1 worker"},{"t":1,"n":2,"rows":[["Workers","2","2 times the work of one worker, shared by 2 workers.",true],["compute","0.33 s","1.00 times the time of one worker.",true],["data","0.46 s","1.06 times the time of one worker.",true]],"label":"2 workers"},{"t":2,"n":4,"rows":[["Workers","4","4 times the work of one worker, shared by 4 workers.",true],["compute","0.33 s","1.02 times the time of one worker.",true],["data","0.48 s","1.11 times the time of one worker.",true]],"label":"4 workers"},{"t":3,"n":8,"rows":[["Workers","8","8 times the work of one worker, shared by 8 workers.",true],["compute","0.34 s","1.04 times the time of one worker.",true],["data","0.62 s","1.42 times the time of one worker.",true]],"label":"8 workers"},{"t":4,"n":16,"rows":[["Workers","16","16 times the work of one worker, shared by 16 workers.",true],["compute","0.42 s","1.29 times the time of one worker.",true],["data","1.17 s","2.70 times the time of one worker.",true]],"label":"16 workers"},{"t":5,"n":32,"rows":[["Workers","32","32 times the work of one worker, shared by 32 workers.",true],["compute","0.50 s","1.53 times the time of one worker.",true],["data","1.86 s","4.29 times the time of one worker.",true]],"label":"32 workers"}]}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// How much faster? Four views of one measured program. t = step + progress; at a whole step the step is drawn finished.
+const SIZES = DATA.sizes;
+const BLUE = "#2a78d6", ORANGE2 = "#eb6834", SERIAL = "#e1e0d9", SERIAL_EDGE = "#898781";
+const KIND = { compute: { fill: "#cde2fb", edge: BLUE }, data: { fill: "#fbd9c9", edge: ORANGE2 } };
+const GROW = 0.7;
+const bx0 = 170, bx1 = 760, by0 = 176, rowH = 32, rowG = 16;        // bars
+const cx0 = 870, cx1 = 1200, cy0 = 176, cy1 = 470;                 // chart
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+const stepOf = (t, steps) => Math.min(Math.floor(t + EPS), steps.length - 1);
+const fmt = x => x >= 10 ? x.toFixed(1) : x.toFixed(2);
+const workersWord = n => n === 1 ? "1 worker" : `${n} workers`;
+
+// ---- the bars: one row per worker count, prepare then pool ----
+function axis(tmax, tick, unit = "s") {
+  const X = v => bx0 + v / tmax * (bx1 - bx0);
+  const yb = by0 + SIZES.length * (rowH + rowG) - rowG + 10;
+  line(bx0, yb, bx1, yb, { color: AXIS });
+  for (let v = 0; v <= tmax + EPS; v += tick) {
+    line(X(v), yb, X(v), yb + 5, { color: AXIS });
+    text(X(v), yb + 18, `${+v.toFixed(1)} ${unit}`, { fs: 11, color: MUTED, ha: "center" });
+  }
+  return X;
+}
+
+function runBars(runs, kind, upto, g, tmax) {
+  const X = axis(tmax, tmax > 12 ? 4 : 2);
+  text(bx0, by0 - 46, "Time of one run, with 1 to 32 workers", { fs: 14, bold: true });
+  box(bx0, by0 - 28, 14, 14, SERIAL, SERIAL_EDGE);
+  text(bx0 + 20, by0 - 21, "prepare (1 worker)", { fs: 12, color: INK_2 });
+  box(bx0 + 160, by0 - 28, 14, 14, KIND[kind].fill, KIND[kind].edge);
+  text(bx0 + 180, by0 - 21, "pool (n workers)", { fs: 12, color: INK_2 });
+  runs.forEach((r, i) => {
+    const y = by0 + i * (rowH + rowG);
+    text(bx0 - 14, y + rowH / 2, workersWord(r.n), { fs: 13, ha: "right", color: i <= upto ? INK : MUTED });
+    if (i > upto) return;
+    const frac = i === upto ? g : 1, t = frac * r.total;
+    const p = Math.min(t, r.prepare), q = Math.max(0, t - r.prepare);
+    box(X(0), y, X(p) - X(0), rowH, SERIAL, SERIAL_EDGE);
+    box(X(r.prepare), y, X(r.prepare + q) - X(r.prepare), rowH, KIND[kind].fill, KIND[kind].edge);
+    if (frac >= 1) text(X(r.total) + 8, y + rowH / 2, `${fmt(r.total)} s`, { fs: 12, color: INK_2 });
+  });
+}
+
+// ---- the chart: speedup against workers, log2 axis ----
+let YMAX = 16;
+function chartFrame(ymax, ylabel = "speedup") {
+  YMAX = ymax;
+  const PX = n => cx0 + Math.log2(n) / 5 * (cx1 - cx0);
+  const PY = v => cy1 - Math.min(v, ymax) / ymax * (cy1 - cy0);
+  text(cx0 - 40, cy0 - 46, ylabel === "speedup" ? "Speedup against workers" : "Pool time against workers", { fs: 14, bold: true });
+  line(cx0, cy1, cx1, cy1, { color: AXIS });
+  line(cx0, cy0, cx0, cy1, { color: AXIS });
+  for (const n of SIZES) text(PX(n), cy1 + 18, String(n), { fs: 11, color: MUTED, ha: "center" });
+  text((cx0 + cx1) / 2, cy1 + 40, "workers", { fs: 12, color: INK_2, ha: "center" });
+  const tick = ymax > 10 ? 4 : ymax > 2 ? 1 : 0.5;
+  for (let v = 0; v <= ymax + EPS; v += tick) {
+    line(cx0 - 4, PY(v), cx0, PY(v), { color: AXIS });
+    text(cx0 - 9, PY(v), String(+v.toFixed(1)), { fs: 11, color: MUTED, ha: "right" });
+  }
+  return [PX, PY];
+}
+
+function curve(PX, PY, f, o) {
+  let prev = null;
+  for (let k = 0; k <= 100; k++) {
+    const n = Math.pow(2, 5 * k / 100), v = f(n);
+    if (v > YMAX + EPS) break;
+    const p = [PX(n), PY(v)];
+    if (prev) line(prev[0], prev[1], p[0], p[1], o);
+    prev = p;
+  }
+}
+
+function points(PX, PY, pts, color, labelRight = true) {
+  pts.forEach((p, i) => {
+    if (i > 0) line(PX(pts[i - 1].n), PY(pts[i - 1].v), PX(p.n), PY(p.v), { color, lw: 1.5 });
+  });
+  pts.forEach((p, i) => {
+    out.push(`<circle cx="${PX(p.n).toFixed(1)}" cy="${PY(p.v).toFixed(1)}" r="6" fill="${color}" stroke="#ffffff" stroke-width="2"/>`);
+    if (i === pts.length - 1) text(PX(p.n) + (labelRight ? 10 : -10), PY(p.v) + (labelRight ? -12 : 16), fmt(p.v), { fs: 12, color: INK_2, ha: labelRight ? "start" : "end" });
+  });
+}
+
+const amdahl = s => n => 1 / (s + (1 - s) / n);
+
+function curveLabel(PX, PY, s) {
+  // at the right edge, or where the curve leaves the top of the chart
+  const label = `s = ${+(s * 100).toFixed(1)}%`;
+  if (amdahl(s)(32) <= YMAX) text(cx1 + 6, PY(amdahl(s)(32)) + 12, label, { fs: 11, color: INK_2 });
+  else text(PX((1 - s) / (1 / YMAX - s)) + 4, PY(YMAX) + 2, label, { fs: 11, color: INK_2 });
+}
+
+function speedChart(kind, upto, done, curves, ymax = 16) {
+  const [PX, PY] = chartFrame(ymax);
+  curve(PX, PY, n => n, { color: MUTED, dashed: true });
+  text(PX(Math.min(ymax, 32)) - 6, PY(ymax) + 14, "ideal", { fs: 11, color: MUTED, ha: "right" });
+  curves.forEach((s, i) => {
+    curve(PX, PY, amdahl(s), { color: i === 0 ? AXIS : GRID, lw: i === 0 ? 3 : 2 });
+    curveLabel(PX, PY, s);
+  });
+  const runs = DATA.strong[kind], t1 = runs[0].total;
+  const pts = runs.slice(0, done ? upto + 1 : upto).map(r => ({ n: r.n, v: t1 / r.total }));
+  points(PX, PY, pts, KIND[kind].edge, curves.length === 0);
+}
+
+function header(title, sub) {
+  text(60, 52, title, { fs: 28 });
+  text(60, 92, sub, { fs: 15, color: INK_2 });
+}
+
+// ---- views ----
+function drawStrong(kind, title, sub, withAmdahl) {
+  return t => {
+    const steps = DATA.views[kind === "compute" ? "strong" : "shared"].steps, k = stepOf(t, steps), g = growthOf(t);
+    header(title, sub);
+    const runs = DATA.strong[kind];
+    runBars(runs, kind, k, g, runs[0].total * 1.1);
+    speedChart(kind, k, g >= 1, withAmdahl ? [DATA.s[kind]] : []);
+    rect(0, 0, W, 720, { cls: "seek" });
+  };
+}
+
+function drawAmdahl(t) {
+  const steps = DATA.views.amdahl.steps, k = stepOf(t, steps), st = steps[k], g = growthOf(t);
+  header("Amdahl's law", "The part only one worker can do caps the speedup");
+  const runs = DATA.strong.compute, upto = SIZES.indexOf(st.show);
+  runBars(runs, "compute", upto, k < 2 ? 1 : g, runs[0].total * 1.1);
+  if (k === 0) {   // the serial share, marked on the first bar
+    const X = v => bx0 + v / (runs[0].total * 1.1) * (bx1 - bx0);
+    const s = DATA.s.compute;
+    line(X(runs[0].prepare), by0 - 6, X(runs[0].prepare), by0 + rowH + 6, { color: ORANGE, lw: 2 });
+    text(X(runs[0].prepare) + 6, by0 + rowH + 18, `s = ${(s * 100).toFixed(1)}% of the time`, { fs: 12, color: ORANGE });
+  }
+  const [PX, PY] = chartFrame(16);
+  curve(PX, PY, n => n, { color: MUTED, dashed: true });
+  text(PX(16) - 6, PY(16) + 14, "ideal", { fs: 11, color: MUTED, ha: "right" });
+  st.curves.forEach((s, i) => {
+    curve(PX, PY, amdahl(s), { color: i === 0 ? AXIS : GRID, lw: i === 0 ? 3 : 2 });
+    curveLabel(PX, PY, s);
+  });
+  if (st.curves.length) {
+    const lim = 1 / st.curves[0];
+    line(cx0, PY(lim), cx1, PY(lim), { color: ORANGE, dashed: true });
+    text(cx0 + 6, PY(lim) - 10, `limit 1 / s = ${lim.toFixed(1)}`, { fs: 11, color: ORANGE });
+  }
+  const t1 = runs[0].total, n = k < 2 ? 0 : (g >= 1 ? upto + 1 : upto);
+  points(PX, PY, runs.slice(0, Math.max(n, 0)).map(r => ({ n: r.n, v: t1 / r.total })), BLUE, false);
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+function drawWeak(t) {
+  const steps = DATA.views.weak.steps, k = stepOf(t, steps), g = growthOf(t);
+  header("Weak scaling", "The problem grows with the workers: ideal is the same time at every size");
+  const tmax = 2.2, X = axis(tmax, 0.5);
+  text(bx0, by0 - 46, "Pool time, with 1 to 32 workers", { fs: 14, bold: true });
+  ["compute", "data"].forEach((kind, j) => {
+    box(bx0 + j * 110, by0 - 28, 14, 14, KIND[kind].fill, KIND[kind].edge);
+    text(bx0 + 20 + j * 110, by0 - 21, kind, { fs: 12, color: INK_2 });
+  });
+  SIZES.forEach((n, i) => {
+    const y = by0 + i * (rowH + rowG);
+    text(bx0 - 14, y + rowH / 2, workersWord(n), { fs: 13, ha: "right", color: i <= k ? INK : MUTED });
+    if (i > k) return;
+    const frac = i === k ? g : 1;
+    ["compute", "data"].forEach((kind, j) => {
+      const r = DATA.weak[kind][i], yy = y + j * (rowH / 2);
+      box(X(0), yy, X(frac * r.pool) - X(0), rowH / 2 - 2, KIND[kind].fill, KIND[kind].edge);
+      if (frac >= 1) text(X(r.pool) + 8, yy + rowH / 4, `${fmt(r.pool)} s`, { fs: 11, color: INK_2 });
+    });
+  });
+  const [PX, PY] = chartFrame(2, "pool");
+  ["compute", "data"].forEach(kind => {
+    const runs = DATA.weak[kind];
+    line(PX(1), PY(runs[0].pool), PX(32), PY(runs[0].pool), { color: KIND[kind].edge, dashed: true, alpha: 0.5 });
+    const pts = runs.slice(0, g >= 1 ? k + 1 : k).map(r => ({ n: r.n, v: r.pool }));
+    points(PX, PY, pts, KIND[kind].edge);
+  });
+  text(cx0 - 40, cy0 - 21, "dashed: time with one worker", { fs: 12, color: INK_2 });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+const seekOf = steps => x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (steps.length - 1)), 0), steps.length - 1);
+const mk = (id, label, draw) => ({
+  id, label, tmax: DATA.views[id].steps.length - 0.001, snap: 0.001, unit: "steps",
+  speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw, seek: seekOf(DATA.views[id].steps),
+});
+const VIEWS = [
+  mk("strong", "Strong scaling", drawStrong("compute", "Strong scaling", "The same problem, more workers: compute tasks", false)),
+  mk("amdahl", "Amdahl", drawAmdahl),
+  mk("shared", "Sharing memory", drawStrong("data", "When the workers share the memory", "The same program with data tasks, against Amdahl", true)),
+  mk("weak", "Weak scaling", drawWeak),
+];
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
