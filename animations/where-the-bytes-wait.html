@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Where the Bytes Wait, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Where the Bytes Wait, Step by Step</h1>
+      <p>A line of output on its way from print to the disk: what a signal does to it while it waits in Python's buffer, what close() guarantees, and how many write calls one open file needs.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>3</kbd> to change view. Click the picture to jump to a step.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About this page</h2>
+    <p><b>What was checked.</b> Every outcome on this page was run on Linux (Ubuntu 26.04, Python 3.14, 9 November 2026): the four ways of stopping report.py, with their exit statuses and what the log contained; the write calls with strace; and the dirty pages in /proc/meminfo after writing and closing 200 MiB.</p>
+    <p><b>The buffer.</b> Python 3.14 uses a buffer of 128 KiB for files, as in the lab. Output to a terminal is written line by line; output to a file or a pipe waits in the buffer.</p>
+    <p><b>Writeback.</b> On this machine the kernel writes a dirty page back once it has been dirty for 30 seconds (vm.dirty_expire_centisecs = 3000) and checks every 5 seconds; other machines use other settings. A disk can also keep data in a cache of its own; os.fsync asks it to store the data too.</p>
+    <p>See the Task 1 explainer (the missing line), the Task 3 explainer (where each line is when close returns, and the write calls of one open file), Lecture 9, p. 25, and Appendix C of the Lab 1 handout.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"where-the-bytes-wait","order":["signal","close","writes"],"views":{"signal":{"label":"Stopped by a signal","title":"A line in Python's buffer","sub":"python3 steps/report.py > /tmp/report.log, stopped four ways","rows":[{"title":"SIGTERM, no handler","sub":"kill PID","cmd":"python3 steps/report.py","sig":"SIGTERM","outcome":"lost","exit":143},{"title":"SIGTERM, with a handler","sub":"kill PID","cmd":"python3 steps/report.py","sig":"SIGTERM","outcome":"handler","exit":143},{"title":"SIGKILL, the same handler","sub":"the out-of-memory killer","cmd":"python3 steps/report.py","sig":"SIGKILL","outcome":"lost","handler":true,"exit":137},{"title":"SIGKILL, python3 -u","sub":"the out-of-memory killer","cmd":"python3 -u steps/report.py","sig":"SIGKILL","outcome":"unbuffered","exit":137}],"steps":[{"play":-1,"done":0,"text":"report.py prints 'report: loaded …' and keeps working. When its output is a terminal, Python writes each line at once. Here the output is a file, so the line waits in Python's buffer, inside the process, until the buffer is full or the program ends normally. Four runs, four ways to stop it.","t":0,"label":"step 1"},{"play":0,"done":0,"text":"kill PID sends SIGTERM. report.py does not catch it, so the kernel ends the process at once: no Python code runs, the buffer goes with the process, and the log stays empty. Exit status 143 = 128 + 15.","t":1,"label":"step 2"},{"play":1,"done":1,"text":"The same signal, but report.py now catches it: signal.signal(signal.SIGTERM, …) with a handler that calls sys.exit(143). Python's normal exit writes its buffer to the file, so the line reaches the log.","t":2,"label":"step 3"},{"play":2,"done":2,"text":"The out-of-memory killer sends SIGKILL. No process can catch or ignore SIGKILL: the handler never runs, and the line is lost. Exit status 137 = 128 + 9. Catching the signal cannot save the line.","t":3,"label":"step 4"},{"play":3,"done":3,"text":"With python3 -u, or print(..., flush=True), Python writes each line at once, before any signal comes. SIGKILL still ends the process, but the line is already in the file.","t":4,"label":"step 5"},{"play":-1,"done":4,"text":"Only what the program handed to the kernel before it ended survives the end of the process. All four runs were checked on Linux; with a pipe to tee instead of a file, SIGKILL left tee's log empty too.","t":5,"label":"step 6"}]},"close":{"label":"close() and the disk","title":"What close() guarantees","sub":"one order appended to audit_2025.csv, then a kill or a power loss","steps":[{"move":"write","call":"f.write(line)","text":"The script appends one order to audit_2025.csv. f.write puts the line in Python's buffer, inside the process.","t":0,"label":"step 1"},{"move":"close","call":"f.close()","text":"f.close() hands what is left in the buffer to the kernel with one write system call, then closes the file. The line is now in the page cache, in RAM, marked dirty: it is not on the disk yet.","t":1,"label":"step 2"},{"move":"stay","call":"","killed":true,"card":["Event K: SIGKILL","The script is killed a second after close returned. Its buffer is gone, but the line was no longer in it: the kernel has it, and any program that reads the file sees it.","#0b0b0b"],"text":"Event K: the script is killed with SIGKILL a second later. The process and its buffer are gone, but the line is safe while the machine runs: the kernel has it.","t":2,"label":"step 3"},{"move":"writeback","call":"","chart":{"play":true},"text":"The kernel copies dirty pages to the disk later, in the background. Measured on Linux: 200 MiB written and closed stayed dirty for about 30 seconds, then the kernel wrote them back.","t":3,"label":"step 4"},{"move":"power","call":"","power":true,"chart":{"upTo":10,"mark":10,"markText":"power fails at 10 s"},"card":["Event P: power loss","Back to the moment close returned. This time the power fails 10 seconds later, before the writeback. RAM is wiped: the page cache, and the line with it.","#c4352b"],"text":"Event P: back to the moment close returned. The power fails 10 seconds later, before the kernel has written the page back. RAM is wiped, page cache included: the line is lost. Only the disk survives.","t":4,"label":"step 5"},{"move":"fsync","call":"os.fsync(f.fileno())","chart":{"fsync":true},"card":["os.fsync","os.fsync asks the kernel to write the file's dirty pages to the disk now, and waits until the disk has them. Only after it returns is the line safe from a power loss.","#1baf7a"],"text":"os.fsync makes the program wait until the disk has the data. Measured: 200 MiB were on the disk 0.22 s later. close alone never waits for the disk; audit.py's open, write and close for every order only protected the lines from a crash of the job.","t":5,"label":"step 6"}]},"writes":{"label":"Write calls","title":"How many write calls?","sub":"2,000,000 lines of 32 bytes, counted with strace","steps":[{"code":{"title":"lines.py, one open file","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","with open(\"lines.txt\", \"w\") as f:      # 128 KiB buffer","    for _ in range(2_000_000):","        f.write(line)"],"hl":null},"lines":[0,0],"buf":131072,"text":"2,000,000 lines of 32 bytes, 64,000,000 bytes in all, written through one open file. Python keeps a buffer of 128 KiB: 131,072 bytes, room for 4,096 of these lines.","note":null,"t":0,"label":"step 1"},{"code":{"title":"lines.py, one open file","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","with open(\"lines.txt\", \"w\") as f:      # 128 KiB buffer","    for _ in range(2_000_000):","        f.write(line)"],"hl":3},"lines":[0,4096],"buf":131072,"flash":"full: one write","text":"f.write copies each line into the buffer. After 4,096 lines the buffer is full: Python hands all 131,072 bytes to the kernel in one write system call, and starts filling the buffer again.","note":null,"t":1,"label":"step 2"},{"code":{"title":"lines.py, one open file","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","with open(\"lines.txt\", \"w\") as f:      # 128 KiB buffer","    for _ in range(2_000_000):","        f.write(line)"],"hl":3},"lines":[4096,2000000],"buf":131072,"text":"The same again and again: one write call for every 4,096 lines. After the last line, 488 full buffers have gone to the kernel, and 36,864 bytes are still in the buffer.","note":null,"t":2,"label":"step 3"},{"code":{"title":"lines.py, one open file","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","with open(\"lines.txt\", \"w\") as f:      # 128 KiB buffer","    for _ in range(2_000_000):","        f.write(line)"],"hl":1},"lines":[2000000,2000000],"buf":131072,"closeAt":0.5,"formula":"64,000,000 ÷ 131,072 = 488.3:  488 full buffers + 1 write at close = 489 write calls","text":"When the with block ends, close hands the rest to the kernel: one more write. 489 write calls in all, counted with strace: about the file size divided by the buffer size, not 1 and not 2,000,000.","note":null,"t":3,"label":"step 4"},{"code":{"title":"lines.py, a 1 MiB buffer","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","with open(\"lines.txt\", \"w\", buffering=1_048_576) as f:","    for _ in range(2_000_000):","        f.write(line)"],"hl":1},"lines":[0,2000000],"buf":1048576,"closeAt":0.9,"flash":null,"formula":"64,000,000 ÷ 1,048,576 = 61.04:  61 full buffers + 1 write at close = 62 write calls","text":"With buffering=1_048_576 the buffer holds 1 MiB, 8 times more: 61 full buffers and one write at close, 62 calls, counted with strace. The number of lines does not matter, only the bytes.","note":null,"t":4,"label":"step 5"},{"code":{"title":"lines.py, open and close for every line","lines":["line = \"x\" * 31 + \"\\n\"                 # 32 bytes","for _ in range(2_000_000):","    with open(\"lines.txt\", \"a\") as f:   # open, write, close","        f.write(line)"],"hl":2},"lines":[0,2000000],"buf":131072,"perline":true,"formula":"2,000,000 lines × 3 system calls = about 6,000,000 calls, instead of 489","text":"Opening, writing and closing for every line, as audit.py did, costs three system calls per line: about 2,000,000 of each. Measured on 10,000 lines: 10,000 write, 10,031 openat and 10,027 close.","note":null,"t":5,"label":"step 6"}]}},"dirty":[[0,216],[1,215],[5,217],[10,218],[20,219],[25,200],[30,203],[35,3],[40,2],[45,2]]};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Shared by the three review pages: step progress, arrows, boxes, a terminal and a code panel.
+// A view's time t runs over its steps: at a whole number the step's state is reached, and between two whole numbers
+// the picture moves from the previous step to the next during the first GROW of the interval.
+const GROW = 0.75;
+const BLUE = "#2a78d6", GREEN = "#1baf7a", RED = "#c4352b", DARK = "#1d1d1b";
+const FILL = { blue: "#cde2fb", orange: "#fbd9c9", green: "#c9eedd", gray: "#efeee9", panel: "#f7f6f2", yellow: "#f6eec4" };
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+function at(id, t) {
+  const steps = DATA.views[id].steps, k = Math.min(Math.floor(t + EPS), steps.length - 1);
+  return { k, st: steps[k], prev: k > 0 ? steps[k - 1] : null, g: growthOf(t) };
+}
+const lerp = (a, b, f) => a + (b - a) * f;
+const part = (g, a, b) => Math.min(Math.max((g - a) / (b - a), 0), 1);   // progress of g inside [a, b]
+
+function arrow(x1, y1, x2, y2, o = {}) {
+  const f = o.grow == null ? 1 : o.grow;
+  if (f <= 0) return;
+  const xe = lerp(x1, x2, f), ye = lerp(y1, y2, f), c = o.color || INK_2, lw = o.lw || 1.5;
+  line(x1, y1, xe, ye, { color: c, lw, dashed: o.dashed, alpha: o.alpha });
+  const a = Math.atan2(ye - y1, xe - x1), s = o.head || 11;
+  const p = [[xe, ye], [xe - s * Math.cos(a - 0.42), ye - s * Math.sin(a - 0.42)], [xe - s * Math.cos(a + 0.42), ye - s * Math.sin(a + 0.42)]];
+  out.push(`<path d="M${p.map(q => q.map(v => v.toFixed(1)).join(",")).join("L")}Z" fill="${c}"`
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+
+// An arrow along a polyline; grow (0-1) reveals it from the first point.
+function polyArrow(pts, o = {}) {
+  const f = o.grow == null ? 1 : o.grow;
+  if (f <= 0) return;
+  const segs = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = segs.reduce((a, b) => a + b, 0) * f;
+  for (let i = 0; i < segs.length && left > 0; i++) {
+    const a = pts[i], b = pts[i + 1], u = Math.min(left / segs[i], 1);
+    if (left <= segs[i] || i === segs.length - 1) { arrow(a[0], a[1], b[0], b[1], { ...o, grow: u }); break; }
+    line(a[0], a[1], b[0], b[1], { color: o.color || INK_2, lw: o.lw || 1.5, alpha: o.alpha });
+    left -= segs[i];
+  }
+}
+
+function label(x, y, s, o = {}) {        // a text with a white background, for labels that sit on lines
+  const fs = o.fs || 11, w = s.length * fs * K * (o.mono ? 0.6 : 0.53) + 10, h = fs * K * 1.35;
+  const x0 = o.ha === "center" ? x - w / 2 : o.ha === "right" ? x - w : x - 5;
+  rect(x0, y - h / 2, w, h, { fill: o.bg || "#ffffff", rx: 4, alpha: o.alpha });
+  text(x, y, s, o);
+}
+
+// A terminal: lines are [kind, text] with kind "cmd" (typed after a prompt), "out" or "dim".
+// The lines a step adds over the previous one are typed while the step plays.
+function terminal(x, y, w, h, lines, before, g, o = {}) {
+  rect(x, y, w, h, { fill: DARK, rx: 8 });
+  text(x + 14, y + 16, o.title || "terminal", { fs: 9.5, color: "#a9a79f" });
+  const fs = o.fs || 10, lh = Math.round(fs * 2), max = Math.floor((h - 40) / lh), n0 = before ? before.length : 0;
+  const shown = lines.length > max ? lines.slice(lines.length - max) : lines, skip = lines.length - shown.length;
+  const nNew = Math.max(lines.length - n0, 0), chars = lines.slice(n0).reduce((s, l) => s + l[1].length + 2, 0);
+  let budget = Math.round(chars * g);
+  shown.forEach(([kind, s], i) => {
+    const idx = i + skip, yy = y + 40 + i * lh;
+    let str = s;
+    if (idx >= n0 && nNew) {
+      if (budget <= 0) return;
+      str = s.slice(0, Math.max(budget - 2, 0));
+      budget -= s.length + 2;
+    }
+    if (kind === "cmd") {
+      text(x + 14, yy, "$", { fs, mono: true, color: "#9fd3a8" });
+      text(x + 30, yy, str, { fs, mono: true, color: "#e9e8e2" });
+    } else {
+      text(x + 14, yy, str, { fs, mono: true, color: kind === "dim" ? "#a9a79f" : "#e9e8e2" });
+    }
+  });
+}
+
+// A code panel with line numbers; hl is the index of the highlighted line (or null).
+function codePanel(x, y, w, title, lines, hl, o = {}) {
+  const lh = o.lh || 22, h = 34 + lines.length * lh + 8;
+  rect(x, y, w, h, { fill: FILL.panel, stroke: AXIS, lw: 0.8, rx: 8 });
+  text(x + 14, y + 17, title, { fs: 10, color: INK_2, mono: true });
+  lines.forEach((s, i) => {
+    const yy = y + 34 + i * lh + lh / 2 - 2;
+    if (i === hl) rect(x + 6, yy - lh / 2 + 1, w - 12, lh - 2, { fill: FILL.yellow, rx: 3 });
+    text(x + 14, yy, String(i + (o.first || 1)).padStart(2), { fs: o.fs || 10, mono: true, color: MUTED });
+    text(x + 44, yy, s, { fs: o.fs || 10, mono: true, color: INK });
+  });
+  return y + h;
+}
+
+// A rounded box with a title and a second line; state "ended" draws it dashed and faded.
+function procBox(cx, cy, w, h, title, sub, o = {}) {
+  const ended = o.ended || 0, alpha = (o.alpha == null ? 1 : o.alpha);
+  const a = alpha * (1 - 0.6 * ended);
+  rect(cx - w / 2, cy - h / 2, w, h, { fill: o.fill || "#ffffff", stroke: o.edge || INK_2, lw: o.lw || 1.2, rx: 8, alpha: a,
+    dash: ended > 0.5 ? "6 4" : null });
+  text(cx, cy - 11, title, { fs: o.fs || 11, ha: "center", mono: o.mono, bold: o.bold, alpha: a });
+  if (sub) text(cx, cy + 12, sub, { fs: 9.5, ha: "center", color: INK_2, alpha: a });
+}
+
+function seekStep(id) {
+  const n = DATA.views[id].steps.length;
+  return x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (n - 1)), 0), n - 1);
+}
+function makeView(id, draw) {
+  return { id, label: DATA.views[id].label, tmax: DATA.views[id].steps.length - 0.001, snap: 0.001, unit: "steps",
+    speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw, seek: seekStep(id) };
+}
+function heading(id) {
+  text(60, 52, DATA.views[id].title, { fs: 26 });
+  text(60, 88, DATA.views[id].sub, { fs: 13.5, color: INK_2 });
+}
+
+// Where the bytes wait: a line in Python's buffer when a signal arrives, close() and the disk, and write calls.
+const CW = 150, CH = 26;   // a line of output, drawn as a chip
+
+function chip(x, y, o = {}) {
+  const a = o.alpha == null ? 1 : o.alpha;
+  if (a <= 0) return;
+  rect(x - CW / 2, y - CH / 2, CW, CH, { fill: o.fill || FILL.blue, stroke: o.edge || BLUE, lw: o.lw || 1.2, rx: 5, alpha: a });
+  text(x, y, o.s || "report: loaded …", { fs: 9, mono: true, ha: "center", alpha: a });
+  if (o.strike) line(x - CW / 2 + 6, y, lerp(x - CW / 2 + 6, x + CW / 2 - 6, o.strike), y, { color: RED, lw: 2.2, alpha: a });
+}
+function wrap(x, y, s, chars, o = {}) {
+  const words = s.split(" "), lh = (o.fs || 11) * K * 1.35;
+  let cur = "", yy = y;
+  for (const w of words) {
+    if ((cur + " " + w).trim().length > chars) { text(x, yy, cur.trim(), o); yy += lh; cur = w; } else cur += " " + w;
+  }
+  if (cur.trim()) { text(x, yy, cur.trim(), o); yy += lh; }
+  return yy;
+}
+
+// ---- view 1: stopped by a signal, four runs ----
+const ROWY = [182, 300, 418, 536];
+
+function sigRow(i, r, g, fade) {
+  const y = ROWY[i], a = fade, yb = y + 11;
+  text(60, y - 14, r.title, { fs: 11.5, bold: true, alpha: a });
+  text(60, y + 12, r.sub, { fs: 10, color: INK_2, mono: true, alpha: a });
+  const print = part(g, 0, 0.25), sig = part(g, 0.35, 0.55), after = part(g, 0.55, 1), end = part(g, 0.85, 1);
+  // the process, with Python's buffer
+  const hot = sig > 0 && end < 1;
+  rect(380, y - 42, 360, 92, { fill: "#ffffff", stroke: hot ? ORANGE : INK_2, lw: hot ? 2 : 1.2, rx: 8,
+    alpha: a * (1 - 0.6 * end), dash: end > 0.5 ? "6 4" : null });
+  text(394, y - 26, r.cmd, { fs: 9.5, mono: true, alpha: a * (1 - 0.6 * end) });
+  rect(392, y - 8, 336, 38, { fill: FILL.panel, rx: 5, alpha: a });
+  text(402, yb, "Python's buffer", { fs: 9, color: MUTED, alpha: a });
+  // the file
+  rect(840, y - 42, 230, 92, { fill: FILL.panel, stroke: AXIS, lw: 1, rx: 8, alpha: a });
+  text(852, y - 26, "/tmp/report.log", { fs: 9.5, mono: true, alpha: a });
+  arrow(742, yb, 838, yb, { color: AXIS, lw: 1.2, alpha: a });
+  text(790, yb - 12, "write", { fs: 9, color: MUTED, ha: "center", alpha: a });
+  // the line
+  const inBuf = [645, yb], inFile = [955, yb];
+  let cx = inBuf[0], alpha = print, strike = 0;
+  if (r.outcome === "unbuffered") cx = lerp(inBuf[0], inFile[0], part(g, 0.15, 0.32));
+  if (r.outcome === "handler") cx = lerp(inBuf[0], inFile[0], part(g, 0.62, 0.84));
+  if (r.outcome === "lost") { strike = part(g, 0.58, 0.8); alpha = print * (1 - 0.65 * part(g, 0.8, 1)); }
+  chip(cx, yb, { alpha: alpha * a, strike });
+  const fileHas = (r.outcome === "unbuffered" && part(g, 0.15, 0.32) >= 1) || (r.outcome === "handler" && part(g, 0.62, 0.84) >= 1);
+  if (!fileHas && !(r.outcome !== "lost" && cx > 800)) text(955, yb, "(empty)", { fs: 9.5, color: MUTED, ha: "center", alpha: a });
+  // the signal
+  if (sig > 0) {
+    arrow(296, yb, 378, yb, { grow: sig, color: ORANGE, lw: 2.5 });
+    label(336, y - 5, r.sig, { fs: 10, bold: true, color: ORANGE, ha: "center", alpha: sig * a });
+  }
+  if (r.outcome === "handler" && after > 0) text(402, y + 40, "handler: sys.exit(143) flushes the buffer", { fs: 9, color: GREEN, alpha: part(g, 0.55, 0.65) * (1 - 0.6 * end) });
+  if (r.outcome === "lost" && r.handler && after > 0) text(402, y + 40, "a handler is set, but it never runs", { fs: 9, color: RED, alpha: part(g, 0.55, 0.65) * (1 - 0.6 * end) });
+  // what is left
+  if (end > 0) {
+    text(1090, y - 12, `exit ${r.exit}`, { fs: 11, mono: true, bold: true, alpha: end });
+    text(1090, y + 12, r.outcome === "lost" ? "line lost" : "line in the log", { fs: 10.5, bold: true, color: r.outcome === "lost" ? RED : GREEN, alpha: end });
+  }
+}
+
+function drawSignal(id) {
+  return t => {
+    const { k, st, g } = at(id, t), rows = DATA.views[id].rows;
+    heading(id);
+    rows.forEach((r, i) => {
+      if (i < st.done) sigRow(i, r, 1, 1);
+      else if (i === st.play) sigRow(i, r, g, 1);
+      else sigRow(i, r, 0, 0.35);
+    });
+    rect(0, 0, W, 720, { cls: "seek" });
+  };
+}
+
+// ---- view 2: close() and the disk ----
+const LANE = { code: [180, 196], buffer: [490, 196], cache: [800, 196], disk: [1100, 196] };
+const CHART = { x0: 690, x1: 1200, y0: 330, y1: 610, tmax: 45, vmax: 250 };
+
+function chain(st, g, ram) {
+  const boxes = [["code", "Your code", "in the process"], ["buffer", "Python's buffer", "in the process (RAM)"],
+                 ["cache", "Page cache", "in the kernel (RAM)"], ["disk", "Storage", "SSD or disk"]];
+  for (const [key, name, sub] of boxes) {
+    const [x, y] = LANE[key], killed = (key === "code" || key === "buffer") ? ram.killed : 0;
+    const wiped = (key === "buffer" || key === "cache") ? ram.wiped : 0;
+    rect(x - 120, y - 54, 240, 108, { fill: wiped > 0.5 ? "#e4e3dd" : key === "disk" ? FILL.panel : "#ffffff",
+      stroke: AXIS, lw: 1, rx: 8, alpha: 1 - 0.55 * killed, dash: killed > 0.5 ? "6 4" : null });
+    text(x, y - 34, name, { fs: 12, bold: true, ha: "center", alpha: 1 - 0.55 * killed });
+    text(x, y + 40, wiped > 0.5 ? "RAM wiped" : killed > 0.5 ? "killed by SIGKILL" : sub,
+      { fs: 9.5, ha: "center", color: wiped > 0.5 || killed > 0.5 ? RED : INK_2 });
+  }
+  line(645, 120, 645, 268, { color: MUTED, lw: 1, dashed: true });
+  text(645, 112, "write system call", { fs: 9.5, ha: "center", color: INK_2 });
+  arrow(302, 196, 368, 196, { color: AXIS }); arrow(612, 196, 678, 196, { color: AXIS }); arrow(922, 196, 978, 196, { color: AXIS });
+  text(180, 200, st.call || "", { fs: 10, mono: true, ha: "center", color: INK });
+}
+
+function chart(upTo, o = {}) {
+  const { x0, x1, y0, y1, tmax, vmax } = CHART, X = v => x0 + v / tmax * (x1 - x0), Y = v => y1 - v / vmax * (y1 - y0);
+  text(x0, y0 - 18, "Dirty pages after close, MiB (measured on Linux)", { fs: 10.5, color: INK_2 });
+  for (const v of [0, 100, 200]) { line(x0, Y(v), x1, Y(v), { color: GRID }); text(x0 - 8, Y(v), String(v), { fs: 9.5, ha: "right", color: MUTED }); }
+  for (let s = 0; s <= tmax; s += 5) text(X(s), y1 + 14, `${s} s`, { fs: 9, ha: "center", color: MUTED });
+  line(x0, y1, x1, y1, { color: AXIS });
+  if (o.fsync) {
+    for (let i = 1; i < DATA.dirty.length; i++) line(X(DATA.dirty[i - 1][0]), Y(DATA.dirty[i - 1][1]), X(DATA.dirty[i][0]), Y(DATA.dirty[i][1]), { color: ORANGE, lw: 1.5, alpha: 0.3 });
+    label(X(26), Y(232), "close only: written back after about 30 s", { fs: 9.5, color: INK_2, alpha: 0.8 });
+    const f = o.grow == null ? 1 : o.grow, F = [[0, 202], [0.22, 2], [45, 2]];
+    line(X(0), Y(202), X(0.22), Y(lerp(202, 2, Math.min(f * 3, 1))), { color: GREEN, lw: 2.5 });
+    if (f > 0.34) line(X(0.22), Y(2), X(lerp(0.22, 45, (f - 0.34) / 0.66)), Y(2), { color: GREEN, lw: 2.5 });
+    label(X(2), Y(110), "with os.fsync: 202 MiB to 2 MiB in 0.22 s", { fs: 10.5, bold: true, color: GREEN });
+    return;
+  }
+  const pts = DATA.dirty.filter(p => p[0] <= upTo + EPS);
+  for (let i = 1; i < pts.length; i++) line(X(pts[i - 1][0]), Y(pts[i - 1][1]), X(pts[i][0]), Y(pts[i][1]), { color: ORANGE, lw: 2 });
+  const last = pts[pts.length - 1], nxt = DATA.dirty.find(p => p[0] > upTo + EPS);
+  if (last && nxt && upTo > last[0]) {
+    const f = (upTo - last[0]) / (nxt[0] - last[0]), v = lerp(last[1], nxt[1], f);
+    line(X(last[0]), Y(last[1]), X(upTo), Y(v), { color: ORANGE, lw: 2 });
+  }
+  for (const p of pts) rect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6, { fill: ORANGE, rx: 3 });
+  if (upTo > 0 && upTo < tmax) line(X(upTo), y0, X(upTo), y1, { color: INK, lw: 1 });
+  if (o.mark) {
+    line(X(o.mark), y0, X(o.mark), y1, { color: RED, lw: 2 });
+    label(X(o.mark) + 6, y0 + 14, o.markText, { fs: 10, bold: true, color: RED });
+  }
+  if (o.note) label(x0 + 10, y1 - 30, o.note, { fs: 10, color: INK });
+}
+
+function drawClose(id) {
+  return t => {
+    const { st, prev, g } = at(id, t);
+    heading(id);
+    const killed = st.killed ? (prev && prev.killed ? 1 : part(g, 0.2, 0.6)) : 0;
+    const wiped = st.power ? part(g, 0.45, 0.7) : 0;
+    chain(st, g, { killed, wiped });
+    // the line
+    let pos = LANE.buffer, alpha = 1, strike = 0, edge = BLUE, fill = FILL.blue;
+    const mv = (a, b, f) => [lerp(a[0], b[0], f), lerp(a[1], b[1], f)];
+    if (st.move === "write") { pos = mv(LANE.code, LANE.buffer, part(g, 0.1, 0.6)); alpha = part(g, 0, 0.15); }
+    else if (st.move === "close") pos = mv(LANE.buffer, LANE.cache, part(g, 0.1, 0.6));
+    else if (st.move === "stay") pos = LANE.cache;
+    else if (st.move === "writeback") {
+      const tc = CHART.tmax * part(g, 0, 0.9);
+      pos = mv(LANE.cache, LANE.disk, Math.min(Math.max((tc - 30) / 5, 0), 1));
+    } else if (st.move === "power") { pos = LANE.cache; strike = part(g, 0.5, 0.75); alpha = 1 - 0.65 * part(g, 0.75, 1); }
+    else if (st.move === "fsync") {
+      const f = part(g, 0.05, 0.75);
+      pos = f < 0.5 ? mv(LANE.buffer, LANE.cache, f * 2) : mv(LANE.cache, LANE.disk, (f - 0.5) * 2);
+    }
+    const onDisk = pos[0] >= LANE.disk[0] - 1;
+    if (pos[0] > LANE.cache[0] - 1 && !onDisk && !strike) { edge = ORANGE; fill = FILL.orange; }
+    if (onDisk) { edge = GREEN; fill = FILL.green; }
+    chip(pos[0], pos[1] - 4, { s: "1042,Iberia,123.45", alpha, strike, edge, fill });
+    if (pos[0] > LANE.cache[0] - 1 && !onDisk && !strike) text(pos[0], pos[1] + 17, "dirty: not on the disk yet", { fs: 9, ha: "center", color: ORANGE });
+    // the event card
+    if (st.card) {
+      const a = part(g, 0, 0.3);
+      rect(60, 300, 580, 150, { fill: FILL.panel, rx: 10, alpha: a });
+      text(80, 330, st.card[0], { fs: 15, bold: true, color: st.card[2] || INK, alpha: a });
+      wrap(80, 362, st.card[1], 62, { fs: 11, color: INK_2, alpha: a });
+    }
+    if (st.chart) {
+      const c = st.chart, upTo = c.play ? CHART.tmax * part(g, 0, 0.9) : c.upTo;
+      chart(upTo, { mark: c.mark, markText: c.markText, note: c.note, fsync: c.fsync, grow: part(g, 0.1, 0.9) });
+    }
+    rect(0, 0, W, 720, { cls: "seek" });
+  };
+}
+
+// ---- view 3: write calls ----
+const FB = { x0: 60, x1: 1220, y: 470, h: 34 };
+
+function drawWrites(id) {
+  return t => {
+    const { st, g } = at(id, t);
+    heading(id);
+    codePanel(60, 116, 560, st.code.title, st.code.lines, st.code.hl, { fs: 9.5, lh: 21 });
+    const f = part(g, 0, st.closeAt ? st.closeAt - 0.05 : 0.9);
+    const lines = Math.round(lerp(st.lines[0], st.lines[1], f));
+    const closed = st.closed === true || (st.closeAt != null && g >= st.closeAt);
+    const writes = st.perline ? lines : Math.floor(lines * 32 / st.buf) + (closed ? 1 : 0);
+    const inBuf = st.perline || closed ? 0 : (lines * 32) % st.buf;
+    const handed = st.perline || closed ? lines * 32 : Math.floor(lines * 32 / st.buf) * st.buf;
+    // the counters
+    const cx = 700;
+    text(cx, 140, st.perline ? "system calls, one of each per line" : "write calls on the file", { fs: 11, color: INK_2 });
+    if (st.perline) {
+      ["openat", "write", "close"].forEach((n, i) => {
+        text(cx + i * 175, 186, lines.toLocaleString("en-US"), { fs: 17, mono: true, bold: true, color: ORANGE });
+        text(cx + i * 175, 214, n, { fs: 11, mono: true, color: INK_2 });
+      });
+    } else {
+      text(cx, 186, writes.toLocaleString("en-US"), { fs: 30, mono: true, bold: true, color: ORANGE });
+    }
+    text(cx, 250, `lines written: ${lines.toLocaleString("en-US")} of 2,000,000`, { fs: 11, color: INK });
+    text(cx, 276, `bytes handed to the kernel: ${handed.toLocaleString("en-US")}`, { fs: 11, color: INK });
+    // Python's buffer
+    if (!st.perline) {
+      const bw = (FB.x1 - FB.x0) * st.buf / 1048576, yb = 360;
+      text(FB.x0, yb - 18, `Python's buffer: ${st.buf === 131072 ? "128 KiB" : "1 MiB"} = ${st.buf.toLocaleString("en-US")} bytes = `
+        + `${(st.buf / 32).toLocaleString("en-US")} lines; now ${inBuf.toLocaleString("en-US")} bytes`, { fs: 11, color: INK_2 });
+      rect(FB.x0, yb, bw, 30, { fill: "#ffffff", stroke: INK_2, lw: 1, rx: 4 });
+      rect(FB.x0 + 1, yb + 1, Math.max(bw * inBuf / st.buf - 2, 0), 28, { fill: FILL.blue, rx: 3 });
+      if (st.flash) {
+        const fl = part(g, 0.85, 0.92) * (1 - part(g, 0.97, 1));
+        if (fl > 0) label(FB.x0 + bw + 14, yb + 15, st.flash, { fs: 11, bold: true, color: ORANGE, alpha: fl });
+      }
+    }
+    // the file
+    const total = 64000000;
+    text(FB.x0, FB.y - 18, "lines.txt: 64,000,000 bytes when complete", { fs: 11, color: INK_2 });
+    rect(FB.x0, FB.y, FB.x1 - FB.x0, FB.h, { fill: FILL.panel, stroke: AXIS, lw: 1, rx: 4 });
+    const wpx = (FB.x1 - FB.x0) * handed / total;
+    rect(FB.x0 + 1, FB.y + 1, Math.max(wpx - 2, 0), FB.h - 2, { fill: st.perline ? FILL.orange : FILL.green, rx: 3 });
+    if (!st.perline) {
+      const step = (FB.x1 - FB.x0) * st.buf / total, n = Math.floor(handed / st.buf);
+      if (step > 4) for (let i = 1; i <= n; i++) line(FB.x0 + i * step, FB.y + 2, FB.x0 + i * step, FB.y + FB.h - 2, { color: "#ffffff", lw: 1 });
+      text(FB.x0, FB.y + FB.h + 18, step > 4 ? "each band: one write call of a full buffer"
+        : "one write call for every 131,072 bytes (488 bands, too thin to draw)", { fs: 9.5, color: MUTED });
+    }
+    if (st.formula) text(60, 590, st.formula, { fs: 13, color: INK, alpha: part(g, st.closeAt || 0.5, 1) });
+    rect(0, 0, W, 720, { cls: "seek" });
+  };
+}
+
+const DRAW = { signal: drawSignal, close: drawClose, writes: drawWrites };
+const VIEWS = DATA.order.map(id => makeView(id, DRAW[id](id)));
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

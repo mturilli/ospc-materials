@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Reading a Profile, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Reading a Profile, Step by Step</h1>
+      <p>Where the times of a cProfile listing come from: which function is running at each moment, why tottime and cumtime differ, and why &lt;module&gt; always has the largest cumtime.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start. Click the picture to jump to a step.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About this page</h2>
+    <p><b>The numbers</b> are those of the review question about clean.py: they are hypothetical, chosen so that the listing adds up. One row takes 18.5 µs: 1.0 µs in &lt;module&gt;, 13.0 µs in fix_name and 2 × 2.25 µs in str.title. A real listing has more lines, for the functions inside pandas.</p>
+    <p><b>The columns.</b> tottime is the time spent in the function itself, without the functions it calls. cumtime is the time from the moment the function is called to the moment it returns, including the functions it calls. percall is tottime divided by ncalls. A real profile shows str.title as {method 'title' of 'str' objects}.</p>
+    <p>See Appendix A of the Lab 1 handout (p. 10): look for the largest tottime and for the functions called once per row of your data.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"reading-a-profile","order":["profile"],"views":{"profile":{"label":"tottime and cumtime","title":"Reading a cProfile listing","sub":"clean.py on 200,000 rows: the listing of the review question (hypothetical numbers)","steps":[{"clock":0,"hl":2,"text":"clean.py runs under cProfile, and a clock runs. At every moment one function is running its own code: the one on top of the call stack. Its tottime grows. The cumtime of every function on the stack grows.","t":0,"label":"step 1"},{"clock":0.4,"hl":4,"text":"<module>, the script itself, calls read_csv. For 0.40 s read_csv is on top: its tottime and cumtime both reach 0.40 s. <module> is on the stack below it, so its cumtime grows too, but not its tottime.","t":1,"label":"step 2"},{"clock":0.4,"hl":15,"zoom":true,"text":"One row, zoomed in: <module> calls fix_name, which runs its own code and calls str.title twice. While str.title runs, fix_name and <module> wait below it: their cumtime grows, their tottime does not. The row takes 18.5 µs.","t":2,"label":"step 3"},{"clock":4.1,"hl":15,"cycle":true,"text":"The same 200,000 times, once per row. At the end fix_name has 2.60 s of its own code, and 3.50 s with the 0.90 s of str.title it called. <module> has only 0.20 s of its own, and 4.10 s in all: everything ran while it was on the stack.","t":3,"label":"step 4"},{"clock":4.1,"hl":8,"done":true,"sorted":true,"hl2":{"fix":"#f6eec4","module":"#efeee9"},"text":"Sorted by tottime, as cProfile -s tottime prints it. fix_name spends the most time in its own code and runs once per row: change it first. <module> has the largest cumtime only because it contains everything. In Task 4, the fix removed the per-row loop.","t":4,"label":"step 5"}]}},"functions":[{"name":"<module>","key":"module","ncalls":1,"tot":0.2,"cum":4.1},{"name":"read_csv","key":"read","ncalls":1,"tot":0.4,"cum":0.4},{"name":"fix_name","key":"fix","ncalls":200000,"tot":2.6,"cum":3.5},{"name":"str.title","key":"title","ncalls":400000,"tot":0.9,"cum":0.9}],"row":[["module",0.5],["fix",4],["title",2.25],["fix",4.5],["title",2.25],["fix",4.5],["module",0.5]],"code":["\"\"\"Clean the names of 200,000 customers.\"\"\"","","import pandas as pd","","people = pd.read_csv(\"customers_sample.csv\")","","","def fix_name(row):","    first = row.first_name.title()","    last = row.last_name.title()","    return f\"{first} {last}\"","","","names = []","for row in people.itertuples():","    names.append(fix_name(row))"]};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Shared by the three review pages: step progress, arrows, boxes, a terminal and a code panel.
+// A view's time t runs over its steps: at a whole number the step's state is reached, and between two whole numbers
+// the picture moves from the previous step to the next during the first GROW of the interval.
+const GROW = 0.75;
+const BLUE = "#2a78d6", GREEN = "#1baf7a", RED = "#c4352b", DARK = "#1d1d1b";
+const FILL = { blue: "#cde2fb", orange: "#fbd9c9", green: "#c9eedd", gray: "#efeee9", panel: "#f7f6f2", yellow: "#f6eec4" };
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+function at(id, t) {
+  const steps = DATA.views[id].steps, k = Math.min(Math.floor(t + EPS), steps.length - 1);
+  return { k, st: steps[k], prev: k > 0 ? steps[k - 1] : null, g: growthOf(t) };
+}
+const lerp = (a, b, f) => a + (b - a) * f;
+const part = (g, a, b) => Math.min(Math.max((g - a) / (b - a), 0), 1);   // progress of g inside [a, b]
+
+function arrow(x1, y1, x2, y2, o = {}) {
+  const f = o.grow == null ? 1 : o.grow;
+  if (f <= 0) return;
+  const xe = lerp(x1, x2, f), ye = lerp(y1, y2, f), c = o.color || INK_2, lw = o.lw || 1.5;
+  line(x1, y1, xe, ye, { color: c, lw, dashed: o.dashed, alpha: o.alpha });
+  const a = Math.atan2(ye - y1, xe - x1), s = o.head || 11;
+  const p = [[xe, ye], [xe - s * Math.cos(a - 0.42), ye - s * Math.sin(a - 0.42)], [xe - s * Math.cos(a + 0.42), ye - s * Math.sin(a + 0.42)]];
+  out.push(`<path d="M${p.map(q => q.map(v => v.toFixed(1)).join(",")).join("L")}Z" fill="${c}"`
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+
+// An arrow along a polyline; grow (0-1) reveals it from the first point.
+function polyArrow(pts, o = {}) {
+  const f = o.grow == null ? 1 : o.grow;
+  if (f <= 0) return;
+  const segs = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = segs.reduce((a, b) => a + b, 0) * f;
+  for (let i = 0; i < segs.length && left > 0; i++) {
+    const a = pts[i], b = pts[i + 1], u = Math.min(left / segs[i], 1);
+    if (left <= segs[i] || i === segs.length - 1) { arrow(a[0], a[1], b[0], b[1], { ...o, grow: u }); break; }
+    line(a[0], a[1], b[0], b[1], { color: o.color || INK_2, lw: o.lw || 1.5, alpha: o.alpha });
+    left -= segs[i];
+  }
+}
+
+function label(x, y, s, o = {}) {        // a text with a white background, for labels that sit on lines
+  const fs = o.fs || 11, w = s.length * fs * K * (o.mono ? 0.6 : 0.53) + 10, h = fs * K * 1.35;
+  const x0 = o.ha === "center" ? x - w / 2 : o.ha === "right" ? x - w : x - 5;
+  rect(x0, y - h / 2, w, h, { fill: o.bg || "#ffffff", rx: 4, alpha: o.alpha });
+  text(x, y, s, o);
+}
+
+// A terminal: lines are [kind, text] with kind "cmd" (typed after a prompt), "out" or "dim".
+// The lines a step adds over the previous one are typed while the step plays.
+function terminal(x, y, w, h, lines, before, g, o = {}) {
+  rect(x, y, w, h, { fill: DARK, rx: 8 });
+  text(x + 14, y + 16, o.title || "terminal", { fs: 9.5, color: "#a9a79f" });
+  const fs = o.fs || 10, lh = Math.round(fs * 2), max = Math.floor((h - 40) / lh), n0 = before ? before.length : 0;
+  const shown = lines.length > max ? lines.slice(lines.length - max) : lines, skip = lines.length - shown.length;
+  const nNew = Math.max(lines.length - n0, 0), chars = lines.slice(n0).reduce((s, l) => s + l[1].length + 2, 0);
+  let budget = Math.round(chars * g);
+  shown.forEach(([kind, s], i) => {
+    const idx = i + skip, yy = y + 40 + i * lh;
+    let str = s;
+    if (idx >= n0 && nNew) {
+      if (budget <= 0) return;
+      str = s.slice(0, Math.max(budget - 2, 0));
+      budget -= s.length + 2;
+    }
+    if (kind === "cmd") {
+      text(x + 14, yy, "$", { fs, mono: true, color: "#9fd3a8" });
+      text(x + 30, yy, str, { fs, mono: true, color: "#e9e8e2" });
+    } else {
+      text(x + 14, yy, str, { fs, mono: true, color: kind === "dim" ? "#a9a79f" : "#e9e8e2" });
+    }
+  });
+}
+
+// A code panel with line numbers; hl is the index of the highlighted line (or null).
+function codePanel(x, y, w, title, lines, hl, o = {}) {
+  const lh = o.lh || 22, h = 34 + lines.length * lh + 8;
+  rect(x, y, w, h, { fill: FILL.panel, stroke: AXIS, lw: 0.8, rx: 8 });
+  text(x + 14, y + 17, title, { fs: 10, color: INK_2, mono: true });
+  lines.forEach((s, i) => {
+    const yy = y + 34 + i * lh + lh / 2 - 2;
+    if (i === hl) rect(x + 6, yy - lh / 2 + 1, w - 12, lh - 2, { fill: FILL.yellow, rx: 3 });
+    text(x + 14, yy, String(i + (o.first || 1)).padStart(2), { fs: o.fs || 10, mono: true, color: MUTED });
+    text(x + 44, yy, s, { fs: o.fs || 10, mono: true, color: INK });
+  });
+  return y + h;
+}
+
+// A rounded box with a title and a second line; state "ended" draws it dashed and faded.
+function procBox(cx, cy, w, h, title, sub, o = {}) {
+  const ended = o.ended || 0, alpha = (o.alpha == null ? 1 : o.alpha);
+  const a = alpha * (1 - 0.6 * ended);
+  rect(cx - w / 2, cy - h / 2, w, h, { fill: o.fill || "#ffffff", stroke: o.edge || INK_2, lw: o.lw || 1.2, rx: 8, alpha: a,
+    dash: ended > 0.5 ? "6 4" : null });
+  text(cx, cy - 11, title, { fs: o.fs || 11, ha: "center", mono: o.mono, bold: o.bold, alpha: a });
+  if (sub) text(cx, cy + 12, sub, { fs: 9.5, ha: "center", color: INK_2, alpha: a });
+}
+
+function seekStep(id) {
+  const n = DATA.views[id].steps.length;
+  return x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (n - 1)), 0), n - 1);
+}
+function makeView(id, draw) {
+  return { id, label: DATA.views[id].label, tmax: DATA.views[id].steps.length - 0.001, snap: 0.001, unit: "steps",
+    speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw, seek: seekStep(id) };
+}
+function heading(id) {
+  text(60, 52, DATA.views[id].title, { fs: 26 });
+  text(60, 88, DATA.views[id].sub, { fs: 13.5, color: INK_2 });
+}
+
+// Reading a profile: the code, the call stack, the cProfile listing as it fills up, and a timeline of what ran.
+// Each function's tottime grows while it is on top of the stack; its cumtime grows while it is anywhere on it.
+const FN = DATA.functions;            // [{name, key, ncalls, tot, cum}], in listing order
+const COLOR = { module: ["#e9e8e2", "#898781"], read: ["#fbd9c9", "#eb6834"], fix: ["#cde2fb", "#2a78d6"], title: ["#c9eedd", "#1baf7a"] };
+const ROW = DATA.row;                 // one row of the data: [[key, microseconds], ...] in the order they run
+
+function stackOf(key) {               // the call stack while `key` runs its own code
+  return { module: ["module"], read: ["module", "read"], fix: ["module", "fix"], title: ["module", "fix", "title"] }[key];
+}
+
+// Totals (seconds) and the stack at time s of the whole run (seconds), from the listing.
+function stateAt(s) {
+  const tot = { module: 0, read: 0, fix: 0, title: 0 }, cum = { module: 0, read: 0, fix: 0, title: 0 };
+  const calls = { module: s > 0 ? 1 : 0, read: s > 0 ? 1 : 0, fix: 0, title: 0 };
+  const read = FN.find(f => f.key === "read").tot, rowLen = ROW.reduce((a, r) => a + r[1], 0) * 1e-6;
+  let top = "module";
+  const add = (key, dt) => { tot[key] += dt; for (const k of stackOf(key)) cum[k] += dt; };
+  add("read", Math.min(s, read));
+  if (s <= 0) top = "module";
+  else if (s < read) top = "read";
+  else {
+    const rows = (s - read) / rowLen, whole = Math.floor(rows), inRow = (rows - whole) * rowLen * 1e6;
+    calls.fix = whole + (inRow > 0.5 ? 1 : 0);
+    calls.title = 2 * whole + (inRow > 4.5 ? 1 : 0) + (inRow > 11.25 ? 1 : 0);
+    for (const [key, us] of ROW) add(key, whole * us * 1e-6);
+    let left = (rows - whole) * rowLen;
+    for (const [key, us] of ROW) {
+      const dt = Math.min(left, us * 1e-6);
+      add(key, dt);
+      if (left > 0 && left <= us * 1e-6 + 1e-12) top = key;
+      left -= dt;
+    }
+  }
+  // fix_name's cumtime counts each call once: the time of the calls to title happens inside it
+  return { tot, cum, top, calls };
+}
+
+function stackPanel(top, x, y0) {
+  text(x, y0 - 22, "call stack", { fs: 11, color: INK_2 });
+  text(x, y0 - 4, "top: running its own code", { fs: 9, color: MUTED });
+  const st = stackOf(top), h = 46;
+  st.forEach((key, i) => {
+    const f = FN.find(q => q.key === key), y = y0 + 280 - (i + 1) * (h + 8), isTop = i === st.length - 1;
+    const [fill, edge] = COLOR[key];
+    rect(x, y, 200, h, { fill, stroke: isTop ? ORANGE : edge, lw: isTop ? 2.2 : 1, rx: 6 });
+    text(x + 100, y + h / 2, f.name, { fs: 10.5, mono: true, ha: "center", bold: isTop });
+  });
+}
+
+function listing(s, x, y, o = {}) {
+  const { tot, cum, calls } = s;
+  const cols = [["function", 0], ["ncalls", 190], ["tottime", 265], ["cumtime", 345]];
+  cols.forEach(([n, dx]) => text(x + dx, y, n, { fs: 10.5, bold: true, color: INK_2, ha: dx ? "right" : "left" }));
+  line(x, y + 12, x + 360, y + 12, { color: AXIS });
+  const order = o.sorted ? [...FN].sort((a, b) => b.tot - a.tot) : FN;
+  order.forEach((f, i) => {
+    const yy = y + 36 + i * 30, done = tot[f.key] > 0 || cum[f.key] > 0;
+    if (o.hl && o.hl[f.key]) rect(x - 8, yy - 13, 376, 26, { fill: o.hl[f.key], rx: 4 });
+    text(x, yy, f.name, { fs: 10, mono: true });
+    text(x + 190, yy, calls[f.key] ? calls[f.key].toLocaleString("en-US") : "", { fs: 10, mono: true, ha: "right", color: INK_2 });
+    text(x + 265, yy, tot[f.key].toFixed(2), { fs: 11, mono: true, ha: "right", bold: true, color: COLOR[f.key][1] });
+    text(x + 345, yy, cum[f.key].toFixed(2), { fs: 11, mono: true, ha: "right", color: INK });
+  });
+}
+
+function timeline(s, x0, x1, y) {
+  const end = FN.find(f => f.key === "module").cum, X = v => x0 + v / end * (x1 - x0);
+  const read = FN.find(f => f.key === "read").tot, reps = 46, rep = (end - read) / reps;
+  const rowLen = ROW.reduce((a, r) => a + r[1], 0);
+  text(x0, y - 16, "what was on top of the stack (the rows are drawn 46 at a time: there are 200,000)", { fs: 10, color: INK_2 });
+  rect(X(0), y, X(Math.min(s, read)) - X(0), 26, { fill: COLOR.read[0] });
+  for (let r = 0; r < reps; r++) {
+    let a = read + r * rep;
+    for (const [key, us] of ROW) {
+      const b = a + us / rowLen * rep;
+      if (a >= s) break;
+      rect(X(a), y, X(Math.min(b, s)) - X(a), 26, { fill: COLOR[key][0] });
+      a = b;
+    }
+  }
+  rect(X(0), y, X(end) - X(0), 26, { stroke: AXIS, lw: 1 });
+  for (let v = 0; v <= 4; v++) text(X(v), y + 40, `${v} s`, { fs: 9, ha: "center", color: MUTED });
+  if (s > 0 && s < end) line(X(s), y - 6, X(s), y + 32, { color: INK, lw: 1.5 });
+  // legend
+  let lx = x0 + 330;
+  for (const key of ["read", "fix", "title", "module"]) {
+    const f = FN.find(q => q.key === key);
+    rect(lx, y + 52, 12, 12, { fill: COLOR[key][0], stroke: COLOR[key][1], lw: 0.8 });
+    text(lx + 18, y + 58, f.name, { fs: 9.5, mono: true, color: INK_2 });
+    lx += f.name.length * 8.5 + 46;
+  }
+}
+
+function zoom(g, x, y, w) {      // one row of the data, in microseconds
+  const total = ROW.reduce((a, r) => a + r[1], 0), us = total * g;
+  text(x, y - 18, `one row of the data, ${total} µs: zoomed in 200,000 times`, { fs: 10.5, color: INK_2 });
+  let a = 0;
+  for (const [key, d] of ROW) {
+    const xa = x + a / total * w, xb = x + Math.min(a + d, us) / total * w;
+    if (us > a) {
+      rect(xa, y, xb - xa, 30, { fill: COLOR[key][0], stroke: COLOR[key][1], lw: 0.8 });
+      if (us >= a + d && d >= 2) text((xa + xb) / 2, y + 15, `${d}`, { fs: 9, ha: "center" });
+    }
+    a += d;
+  }
+  rect(x, y, w, 30, { stroke: AXIS, lw: 1 });
+  text(x + w, y + 46, `${us.toFixed(1)} µs`, { fs: 10, mono: true, ha: "right" });
+  // the stack now
+  let t = 0, top = "module";
+  for (const [key, d] of ROW) { if (us >= t && us < t + d) top = key; t += d; }
+  return top;
+}
+
+function draw(id) {
+  return t => {
+    const { st, prev, g } = at(id, t);
+    heading(id);
+    codePanel(60, 116, 470, "clean.py", DATA.code, st.hl, { fs: 9.5, lh: 19 });
+    const s0 = prev ? prev.clock : 0, s = st.zoom ? st.clock : lerp(s0, st.clock, part(g, 0, 0.9));
+    let state = stateAt(s), top = state.top;
+    if (st.zoom) {
+      // the totals after read_csv, plus the part of one row played so far
+      const z = part(g, 0, 0.9), base = stateAt(st.clock), us = ROW.reduce((a, r) => a + r[1], 0) * z;
+      top = zoom(z, 60, 600, 1160);
+      const rt = { module: 0, fix: 0, title: 0 }, rc = { module: 0, fix: 0, title: 0 };
+      let a = 0;
+      for (const [key, d] of ROW) {
+        const dt = Math.max(0, Math.min(us - a, d));
+        base.tot[key] += dt * 1e-6; rt[key] += dt;
+        for (const k of stackOf(key)) { base.cum[k] += dt * 1e-6; rc[k] += dt; }
+        a += d;
+      }
+      base.calls.fix = us > 0.5 ? 1 : 0;
+      base.calls.title = (us > 4.5 ? 1 : 0) + (us > 11.25 ? 1 : 0);
+      state = base;
+      // the same row, in microseconds
+      const tx = 840, ty = 404;
+      text(tx, ty - 26, "this row only, in µs", { fs: 11, color: INK_2 });
+      [["function", 0], ["tottime", 265], ["cumtime", 345]].forEach(([n, dx]) => text(tx + dx, ty, n, { fs: 10.5, bold: true, color: INK_2, ha: dx ? "right" : "left" }));
+      line(tx, ty + 12, tx + 360, ty + 12, { color: AXIS });
+      [["<module>", "module"], ["fix_name", "fix"], ["str.title", "title"]].forEach(([n, k], i) => {
+        const yy = ty + 36 + i * 30;
+        text(tx, yy, n, { fs: 10, mono: true });
+        text(tx + 265, yy, rt[k].toFixed(2), { fs: 11, mono: true, ha: "right", bold: true, color: COLOR[k][1] });
+        text(tx + 345, yy, rc[k].toFixed(2), { fs: 11, mono: true, ha: "right" });
+      });
+    } else {
+      timeline(s, 60, 1220, 590);
+    }
+    if (st.cycle) {
+      stackPanel("title", 580, 150);
+      text(580, 470, "200,000 times: fix_name, then str.title", { fs: 9.5, color: INK_2 });
+      text(580, 488, "twice, then back to <module>", { fs: 9.5, color: INK_2 });
+    } else stackPanel(st.done ? "module" : top, 580, 150);
+    text(840, 140, st.sorted ? "the listing, sorted by tottime" : "the listing so far", { fs: 11, color: INK_2 });
+    listing(state, 840, 172, { sorted: st.sorted, hl: st.hl2 });
+    text(1220, 52, `${s.toFixed(2)} s`, { fs: 22, mono: true, ha: "right" });
+    if (st.done) text(580, 470, "the program has ended", { fs: 10, color: MUTED });
+    rect(0, 0, W, 720, { cls: "seek" });
+  };
+}
+
+const VIEWS = DATA.order.map(id => makeView(id, draw(id)));
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
