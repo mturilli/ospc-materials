@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open a Course Notebook</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --ink: #0b0b0b; --ink-2: #52514e; --rule: #e1e0d9; --link: #1f63b5;
+    --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+    --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1b1a; --ink: #f2f1ec; --ink-2: #b9b8b1; --rule: #3a3936; --link: #8bb8f0; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 var(--font); }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 16px; }
+  h1 { font-size: 28px; font-weight: normal; margin: 0 0 16px; }
+  p { color: var(--ink-2); margin: 0 0 14px; }
+  a { color: var(--link); }
+  code { font-family: var(--mono); font-size: 15px; }
+  ul { padding-left: 20px; }
+  li { margin: 0 0 10px; }
+  #opening { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <section id="opening">
+    <h1>Opening <code id="name"></code> on the cluster…</h1>
+    <p>If nothing happens, <a id="go" href="#">click here</a>.</p>
+  </section>
+  <section id="index">
+    <h1>Open a Course Notebook</h1>
+    <p>Each link opens JupyterLab on our cluster: sign in with your cluster account, no VPN needed. It copies the
+      course notebooks into your home, in the folder <code>ospc-materials/notebooks</code>, and opens the one you
+      clicked.</p>
+    <p>Click the link again next time: it brings in my new notebooks and my changes, and keeps the changes you made.
+      The files a notebook writes, like job outputs, stay where they are.</p>
+    <ul id="list"></ul>
+    <p>The short form of each link is <code>mturilli.github.io/ospc-materials/open.html#</code> followed by the name of
+      the notebook, for example <code>open.html#scaling</code>.</p>
+  </section>
+</main>
+<script>
+  // The notebooks in notebooks/ of this repository, oldest first.
+  const NOTEBOOKS = [
+    ["threads-processes", "Threads and processes in Python"],
+    ["scaling", "How much faster?"],
+    ["library-threads", "Threads inside the libraries"],
+  ];
+  // nbgitpuller link: clone or update github.com/mturilli/ospc-materials in the home folder, then open the notebook.
+  const pull = name => "https://jupyter.iesci.tech:8085/hub/user-redirect/git-pull"
+    + "?repo=" + encodeURIComponent("https://github.com/mturilli/ospc-materials")
+    + "&branch=main&urlpath=" + encodeURIComponent("lab/tree/ospc-materials/notebooks/" + name + ".ipynb");
+
+  const list = document.getElementById("list");
+  for (const [name, title] of NOTEBOOKS) {
+    const li = document.createElement("li"), a = document.createElement("a"), code = document.createElement("code");
+    a.href = pull(name);
+    a.textContent = title;
+    code.textContent = "open.html#" + name;
+    li.append(a, ": ", code);
+    list.append(li);
+  }
+
+  const name = decodeURIComponent(location.hash.slice(1)).trim().toLowerCase().replace(/\.ipynb$/, "");
+  if (/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+    document.getElementById("index").style.display = "none";
+    document.getElementById("opening").style.display = "block";
+    document.getElementById("name").textContent = name + ".ipynb";
+    document.getElementById("go").href = pull(name);
+    location.replace(pull(name));
+  }
+  addEventListener("hashchange", () => location.reload());
+</script>
+</body>
+</html>

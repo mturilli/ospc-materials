@@ -24,7 +24,7 @@ Each animation is a single HTML file with no dependencies. Open the link, or dow
 
 ## Notebooks
 
-Notebooks we run in class on the cluster, in the kernel OSPC (Python 3.12). In JupyterLab, open a terminal (File > New > Terminal) and download the notebook with `curl -O` followed by its link.
+Notebooks we run in class on the cluster, in the kernel OSPC (Python 3.12). To open one on the cluster, use its short link: `mturilli.github.io/ospc-materials/open.html#` followed by its name, for example `open.html#scaling`. It copies the notebooks into your home, in `ospc-materials/notebooks`, and brings in my changes every time you click it. All the links are on [Open a Course Notebook](https://mturilli.github.io/ospc-materials/open.html). You can still download a notebook with `curl -O` followed by its link below.
 
 - [Threads and processes in Python](https://mturilli.github.io/ospc-materials/notebooks/threads-processes.ipynb): start threads and processes by hand, see what they share, compare them in batch jobs with `sbatch`, then lose updates in a race and fix it with a lock.
 - [How much faster?](https://mturilli.github.io/ospc-materials/notebooks/scaling.ipynb): run one program with 1 to 32 workers in a batch job, compute speedup and efficiency, compare them with Amdahl's law, and see what changes when the tasks read from memory and when the problem grows with the workers.
