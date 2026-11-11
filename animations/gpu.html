@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>A GPU, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>A GPU, Step by Step</h1>
+      <p>How a GPU keeps thousands of cores busy, why a CuPy call returns before the GPU has finished, why small arrays lose, and why every operation costs a trip to memory. Measured on our cluster.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>4</kbd> to change view. Click a timeline to jump to that moment.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements and the models</h2>
+    <p><b>Where.</b> julia, a node of our cluster, 11 November 2026: NVIDIA RTX PRO 6000 Blackwell Server Edition (188 SMs, 96 GB). A job with 4 CPUs and one GPU, CuPy 14.2. GPU times are medians from cupyx.profiler.benchmark; NumPy times are the best of 5 runs, one thread. haskell's RTX 6000 Ada (142 SMs, 48 GB) gives the same shapes, about 1.8 times slower on large arrays.</p>
+    <p><b>Warps.</b> A model with two numbers: 1 turn of work and 8 turns of waiting per instruction, one scheduler that takes the warp that has been ready longest. A real SM has 4 schedulers, up to 48 warps, and waits several hundred cycles for its memory.</p>
+    <p><b>Launches.</b> Measured: 4.6 µs of CPU time per launch (20,000 launches without waiting) and 0.81 ms for a + b on 1e8 float32. Schematic: 2 µs of GPU work for 10,000 numbers and 1 µs from a launch to the start of its kernel.</p>
+    <p><b>Size.</b> Measured, float32, a + b with both arrays already on the GPU. Between 1 and 10 million numbers the three arrays fit in the GPU's L2 cache, so the rate passes 2 TB/s; from 100 million on it is the memory's 1.48 TB/s.</p>
+    <p><b>Fusion.</b> Measured: 3.81 ms for the six kernels, 1.07 ms for cp.fuse and for an ElementwiseKernel, 176 ms for NumPy. Bytes counted from the arrays each kernel reads and writes (x * x reads x once).</p>
+    <p>Data files: lecture19/measure (README.md, raw/gpu-julia-28457.json).</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"gpu","order":["warps","launch","size","fusion"],"views":{"warps":{"label":"Warps","title":"Hiding the wait for memory","sub":"One SM, warps of 32 threads; a model: 1 turn of work, then 8 turns waiting for memory","cycles":36,"steps":[{"sched":{"n":1,"grid":[["run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem"]],"sm":[0,null,null,null,null,null,null,null,null,0,null,null,null,null,null,null,null,null,0,null,null,null,null,null,null,null,null,0,null,null,null,null,null,null,null,null],"busy":4},"text":"One SM and one warp: 32 threads that run the same instruction. Each turn the warp runs one instruction (blue), then waits 8 turns for its data from memory (grey). The SM works 1 turn in 9.","t":0,"label":"step 1"},{"sched":{"n":2,"grid":[["run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem"],["ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem"]],"sm":[0,1,null,null,null,null,null,null,null,0,1,null,null,null,null,null,null,null,0,1,null,null,null,null,null,null,null,0,1,null,null,null,null,null,null,null],"busy":8},"text":"A second warp. While the first waits for memory, the SM runs the second one. Switching costs nothing: every warp keeps its own registers in the SM. 2 turns in 9.","t":1,"label":"step 2"},{"sched":{"n":4,"grid":[["run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem"],["ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem"],["ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem"],["ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem"]],"sm":[0,1,2,3,null,null,null,null,null,0,1,2,3,null,null,null,null,null,0,1,2,3,null,null,null,null,null,0,1,2,3,null,null,null,null,null],"busy":16},"text":"Four warps: 4 turns in 9. Each warp is no faster than before; the SM is busier.","t":2,"label":"step 3"},{"sched":{"n":9,"grid":[["run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem"],["ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem"],["ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem"],["ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem"],["ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem"],["ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem"],["ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem"],["ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem"],["ready","ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run","mem","mem","mem","mem","mem","mem","mem","mem","run"]],"sm":[0,1,2,3,4,5,6,7,8,0,1,2,3,4,5,6,7,8,0,1,2,3,4,5,6,7,8,0,1,2,3,4,5,6,7,8],"busy":36},"text":"Nine warps: the SM runs an instruction every turn. When a warp waits, another one has its data. The wait for memory is hidden.","t":3,"label":"step 4"},{"sched":{"n":12,"grid":[["run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready"],["ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready"],["ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready"],["ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem"],["ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem"],["ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem"],["ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem"],["ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem"],["ready","ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem"],["ready","ready","ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem"],["ready","ready","ready","ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem"],["ready","ready","ready","ready","ready","ready","ready","ready","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run","mem","mem","mem","mem","mem","mem","mem","mem","ready","ready","ready","run"]],"sm":[0,1,2,3,4,5,6,7,8,9,10,11,0,1,2,3,4,5,6,7,8,9,10,11,0,1,2,3,4,5,6,7,8,9,10,11],"busy":36},"text":"Twelve warps: still busy every turn, and the extra warps wait for their turn (yellow). A real SM holds up to 48 warps (1,536 threads) and waits hundreds of turns for memory, so the GPU needs about 288,768 threads at once: arrays of hundreds of thousands of numbers.","t":4,"label":"step 5"}]},"launch":{"label":"Launches","title":"The CPU launches, the GPU runs","sub":"Five calls of a + b; measured on julia: 4.6 µs to launch a kernel, 0.81 ms for a + b on 1e8 numbers","steps":[{"unit":"us","tmax":30,"cpu":[[0.0,4.6],[4.6,9.2],[9.2,13.799999999999999],[13.799999999999999,18.4],[18.4,23.0]],"gpu":[[5.6,7.6],[10.2,12.2],[14.799999999999999,16.799999999999997],[19.4,21.4],[24.0,26.0]],"mode":"small","text":"Five calls of a + b on 10,000 numbers. Python runs on the CPU: each CuPy call launches a kernel on the GPU and returns, about 4.6 µs per launch. The GPU needs only a couple of µs per kernel, then waits for the next launch.","t":0,"label":"step 1"},{"unit":"us","tmax":30,"cpu":[[0.0,4.6],[4.6,9.2],[9.2,13.799999999999999],[13.799999999999999,18.4],[18.4,23.0]],"gpu":[[5.6,7.6],[10.2,12.2],[14.799999999999999,16.799999999999997],[19.4,21.4],[24.0,26.0]],"mode":"small2","text":"Five kernels take 23 µs, whatever the size of the arrays: the CPU's launches set the pace. With small arrays the GPU spends most of its time waiting.","t":1,"label":"step 2"},{"unit":"ms","tmax":4.6,"cpu":[[0.0,4.6],[4.6,9.2],[9.2,13.799999999999999],[13.799999999999999,18.4],[18.4,23.0]],"gpu":[[5.6,815.6],[815.6,1625.6],[1625.6,2435.6],[2435.6,3245.6],[3245.6,4055.6]],"mode":"big","text":"Now a + b on 100 million numbers: 0.81 ms per kernel. The CPU launches the five in 23 µs and goes on with the program, while the GPU works through its queue, one kernel after the other.","t":2,"label":"step 3"},{"unit":"ms","tmax":4.6,"cpu":[[0.0,4.6],[4.6,9.2],[9.2,13.799999999999999],[13.799999999999999,18.4],[18.4,23.0]],"gpu":[[5.6,815.6],[815.6,1625.6],[1625.6,2435.6],[2435.6,3245.6],[3245.6,4055.6]],"mode":"wrong","clock":0.023,"text":"A clock read right after the last call stops at 0.023 ms, while the GPU still has 4.03 ms of work to do. The number looks great and is wrong.","t":3,"label":"step 4"},{"unit":"ms","tmax":4.6,"cpu":[[0.0,4.6],[4.6,9.2],[9.2,13.799999999999999],[13.799999999999999,18.4],[18.4,23.0]],"gpu":[[5.6,815.6],[815.6,1625.6],[1625.6,2435.6],[2435.6,3245.6],[3245.6,4055.6]],"mode":"right","clock":4.0556,"text":"cp.cuda.Device().synchronize() makes the CPU wait until the GPU has finished. The clock now reads 4.06 ms: five times 0.81 ms, plus the first launch.","t":4,"label":"step 5"}]},"size":{"label":"Size","title":"Small arrays lose","sub":"a + b in float32, data already on the GPU; measured on julia (RTX PRO 6000 Blackwell)","points":[[1000,0.0066,0.0005,"1,000"],[10000,0.0064,0.0011,"10,000"],[100000,0.0079,0.011,"100,000"],[1000000,0.012,0.109,"1 million"],[10000000,0.0509,3.2467,"10 million"],[100000000,0.8102,36.12,"100 million"],[1000000000,8.0436,363.35,"1 billion"]],"launch":0.0065,"steps":[{"n":1000,"text":"a + b with the data already in the GPU's memory, against NumPy on the CPU (one thread). 1,000 numbers: NumPy 0.5 µs, the GPU 6.6 µs. The GPU's time is the launch, not the work.","t":0,"label":"step 1"},{"n":10000,"text":"10,000 numbers: the GPU still takes about 6.5 µs, NumPy 1.1 µs.","t":1,"label":"step 2"},{"n":100000,"text":"100,000 numbers: the GPU wins for the first time, 7.9 µs against 11 µs.","t":2,"label":"step 3"},{"n":1000000,"text":"1 million numbers: 9 times faster. The three arrays (12 MB) fit in the GPU's cache (L2, 128 MB).","t":3,"label":"step 4"},{"n":10000000,"text":"10 million: 64 times faster. The arrays still fit in L2, and NumPy's no longer fit in the CPU's caches.","t":4,"label":"step 5"},{"n":100000000,"text":"100 million: 0.8102 ms against 36 ms, 45 times faster. The GPU reads and writes its memory at 1.48 TB/s, NumPy at 33 GB/s.","t":5,"label":"step 6"},{"n":1000000000,"text":"1 billion numbers, 12 GB: both times grow ten times. Remember the copies: moving a and b to the GPU and the result back takes longer than NumPy's addition, so a + b alone never pays off (Lecture 13).","t":6,"label":"step 7"}]},"fusion":{"label":"Fusion","title":"Every operation is a trip to memory","sub":"r = sqrt(x*x + y*y + z*z), 100 million float32; measured on julia","kernels":[["t1 = x * x",["x"],"t1"],["t2 = y * y",["y"],"t2"],["t3 = t1 + t2",["t1","t2"],"t3"],["t4 = z * z",["z"],"t4"],["t5 = t3 + t4",["t3","t4"],"t5"],["r = sqrt(t5)",["t5"],"r"]],"gb":0.4,"rate":1.4698162729658795,"unfused":3.81,"fused":1.07,"steps":[{"k":-1,"text":"r = cp.sqrt(x*x + y*y + z*z) on 100 million float32 numbers. x, y and z are in the GPU's memory, 400 MB each. CuPy runs it one operation at a time, like NumPy.","t":0,"label":"step 1"},{"k":0,"moved":0.8,"text":"Kernel 1: t1 = x * x. It reads x from memory and writes t1 back: 0.8 GB. ","t":1,"label":"step 2"},{"k":1,"moved":1.6,"text":"Kernel 2: t2 = y * y. It reads y from memory and writes t2 back: 0.8 GB. ","t":2,"label":"step 3"},{"k":2,"moved":2.8,"text":"Kernel 3: t3 = t1 + t2. It reads t1 and t2 from memory and writes t3 back: 1.2 GB. ","t":3,"label":"step 4"},{"k":3,"moved":3.6,"text":"Kernel 4: t4 = z * z. It reads z from memory and writes t4 back: 0.8 GB. ","t":4,"label":"step 5"},{"k":4,"moved":4.8,"text":"Kernel 5: t5 = t3 + t4. It reads t3 and t4 from memory and writes t5 back: 1.2 GB. ","t":5,"label":"step 6"},{"k":5,"moved":5.6,"text":"Kernel 6: r = sqrt(t5). It reads t5 from memory and writes r back: 0.8 GB. In all, six kernels moved 5.6 GB: 3.81 ms, 1.47 GB per ms.","t":6,"label":"step 7"},{"k":6,"moved":1.6,"text":"cp.fuse (or an ElementwiseKernel) makes one kernel: each thread reads x[i], y[i] and z[i], computes, and writes r[i]. 1.6 GB, 1.07 ms: 1.50 GB per ms, the same rate. NumPy takes 176 ms.","t":7,"label":"step 8"}]}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// A GPU, step by step: four views drawn from DATA (make_gpu_page.py). t = step + progress; a whole t shows that
+// step complete, and the interval after it animates into the next one (as on the Lecture 17-18 pages).
+const DONE = "#e1e0d9", CARD = "#f3f2ee";
+const GROW = 0.75;
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+function stepOf(v, t) { return Math.min(Math.floor(t + EPS), v.steps.length - 1); }
+
+function header(v, right) {
+  text(60, 52, v.title, { fs: 28 });
+  text(60, 90, v.sub, { fs: 15, color: INK_2 });
+  if (right) text(W - 60, 52, right, { fs: 22, ha: "right", mono: true });
+}
+
+function hatch(x, y, w, h, color = MUTED) {  // diagonal strokes over a box
+  for (let d = -h; d < w; d += 6) {
+    const xa = x + Math.max(d, 0), ya = y + h - Math.max(-d, 0);
+    const xb = x + Math.min(d + h, w), yb = y + h - Math.min(d + h, w) + d;
+    if (xb > xa) line(xa, ya, xb, yb, { color, lw: 0.6, alpha: 0.8 });
+  }
+}
+
+function arrowHead(x, y, dir, color) {        // small arrow head pointing up (dir -1) or down (dir 1)
+  line(x - 5, y - 7 * dir, x, y, { color, lw: 1.5 });
+  line(x + 5, y - 7 * dir, x, y, { color, lw: 1.5 });
+}
+
+function legendItem(x, y, fill, edge, label, hatched) {
+  rect(x, y - 8, 22, 16, { fill, stroke: edge, lw: 0.75 });
+  if (hatched) hatch(x, y - 8, 22, 16);
+  text(x + 30, y, label, { fs: 13, color: INK_2 });
+}
+
+// ---------------------------------------------------------------- 1. warps
+function drawWarps(v, t) {
+  const k = stepOf(v, t), g = growthOf(t), S = v.steps[k].sched, C = v.cycles;
+  const now = g * C;                                   // turns shown so far
+  const x0 = 210, x1 = W - 60, cw = (x1 - x0) / C;
+  const shown = Math.floor(now + EPS);
+  const busy = S.sm.slice(0, shown).filter(w => w !== null).length;
+  header(v, `turn ${Math.min(shown, C)}`);
+  const top = 140, rowH = Math.min(30, 430 / (S.n + 1.6)), gap = 4;
+  // SM row
+  text(x0 - 14, top + rowH / 2, "SM runs", { fs: 13, ha: "right", bold: true });
+  for (let c = 0; c < C; c++) {
+    const x = x0 + c * cw;
+    rect(x, top, cw - 2, rowH, { fill: "#ffffff", stroke: GRID });
+    if (c < shown) {
+      const w = S.sm[c];
+      if (w === null) text(x + cw / 2 - 1, top + rowH / 2, "idle", { fs: 9.5, ha: "center", color: MUTED });
+      else {
+        rect(x, top, cw - 2, rowH, { fill: JOB.A, stroke: JOB_EDGE.A, lw: 0.75 });
+        text(x + cw / 2 - 1, top + rowH / 2, `w${w + 1}`, { fs: 10.5, ha: "center" });
+      }
+    }
+  }
+  // warp rows
+  for (let w = 0; w < S.n; w++) {
+    const y = top + (w + 1) * (rowH + gap) + 10;
+    text(x0 - 14, y + rowH / 2, `warp ${w + 1}`, { fs: 12.5, ha: "right", color: INK_2 });
+    for (let c = 0; c < shown; c++) {
+      const x = x0 + c * cw, st = S.grid[w][c];
+      if (st === "run") rect(x, y, cw - 2, rowH, { fill: JOB.A, stroke: JOB_EDGE.A, lw: 0.75 });
+      else if (st === "mem") { rect(x, y, cw - 2, rowH, { fill: CARD, stroke: GRID }); hatch(x, y, cw - 2, rowH); }
+      else rect(x, y, cw - 2, rowH, { fill: JOB.E, stroke: JOB_EDGE.E, lw: 0.75 });
+    }
+  }
+  const yb = top + (S.n + 1) * (rowH + gap) + 26;
+  for (let c = 0; c <= C; c += 4) text(x0 + c * cw, yb, `${c}`, { fs: 11, color: MUTED, ha: "center" });
+  text(x0 - 14, yb, "turn", { fs: 11, color: MUTED, ha: "right" });
+  if (now > EPS && now < C) line(x0 + now * cw, top - 6, x0 + now * cw, yb - 10, { color: ORANGE, lw: 1.5 });
+  const ly = Math.max(yb + 34, 612);
+  legendItem(60, ly, JOB.A, JOB_EDGE.A, "runs an instruction");
+  legendItem(300, ly, CARD, GRID, "waits for memory", true);
+  legendItem(520, ly, JOB.E, JOB_EDGE.E, "has its data, waits for its turn");
+  if (shown > 0) text(W - 60, ly, `SM busy ${busy} of ${shown} turns: ${Math.round(100 * busy / shown)}%`,
+    { fs: 17, ha: "right", bold: true });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 2. launches
+function drawLaunch(v, t) {
+  const k = stepOf(v, t), g = growthOf(t), st = v.steps[k];
+  const scale = st.unit === "ms" ? 1000 : 1;         // data are in us
+  const tmax = st.tmax, x0 = 250, x1 = W - 70, X = s => x0 + s / tmax * (x1 - x0);
+  const end = Math.max(...st.gpu.map(p => p[1])) / scale;
+  const right = st.mode === "right";
+  const horizon = (right ? end : st.mode === "small" || st.mode === "small2" ? tmax : end) * g;
+  const now = Math.min(horizon, tmax);
+  header(v, st.mode === "wrong" ? `clock: ${st.clock.toFixed(3)} ms` : right && g >= 1 - EPS ? `clock: ${st.clock.toFixed(2)} ms` : "");
+  const yc = 190, yg = 330, h = 64;
+  text(x0 - 20, yc + h / 2 - 10, "CPU", { fs: 16, ha: "right", bold: true });
+  text(x0 - 20, yc + h / 2 + 12, "your Python code", { fs: 12, ha: "right", color: INK_2 });
+  text(x0 - 20, yg + h / 2 - 10, "GPU", { fs: 16, ha: "right", bold: true });
+  text(x0 - 20, yg + h / 2 + 12, "runs its queue", { fs: 12, ha: "right", color: INK_2 });
+  line(x0, yc + h, x1, yc + h, { color: GRID });
+  line(x0, yg + h, x1, yg + h, { color: GRID });
+  st.cpu.forEach((p, i) => {
+    const a = p[0] / scale, b = p[1] / scale;
+    if (a >= now) return;
+    const e = Math.min(b, now);
+    rect(X(a), yc, Math.max(X(e) - X(a), 1.5), h, { fill: JOB.B, stroke: JOB_EDGE.B, lw: 0.75 });
+    if (st.unit === "us" && e >= b - EPS) text((X(a) + X(b)) / 2, yc + h / 2, `launch ${i + 1}`, { fs: 11.5, ha: "center" });
+  });
+  const lastLaunch = st.cpu[st.cpu.length - 1][1] / scale;
+  if (st.unit === "ms" && now > lastLaunch) {
+    text(X(lastLaunch) + 8, yc - 14, "5 launches: 0.023 ms", { fs: 12, color: INK_2 });
+    if (right) {
+      const e = Math.min(end, now);
+      rect(X(lastLaunch), yc, X(e) - X(lastLaunch), h, { fill: CARD, stroke: MUTED, lw: 0.75 });
+      hatch(X(lastLaunch), yc, X(e) - X(lastLaunch), h);
+      text((X(lastLaunch) + X(e)) / 2, yc + h / 2, "synchronize(): waits for the GPU", { fs: 13, ha: "center", bold: true });
+    } else {
+      text((X(lastLaunch) + X(Math.min(tmax, now))) / 2, yc + h / 2, "the rest of the program", { fs: 13, ha: "center", color: INK_2 });
+    }
+  }
+  st.gpu.forEach((p, i) => {
+    const a = p[0] / scale, b = p[1] / scale;
+    if (a >= now) return;
+    const e = Math.min(b, now);
+    rect(X(a), yg, Math.max(X(e) - X(a), 1.5), h, { fill: JOB.A, stroke: JOB_EDGE.A, lw: 0.75 });
+    if (st.unit === "ms" && e >= b - EPS) text((X(a) + X(b)) / 2, yg + h / 2, `a + b, kernel ${i + 1}`, { fs: 12, ha: "center" });
+    else if (e >= b - EPS) text((X(a) + X(b)) / 2, yg + h / 2, `${i + 1}`, { fs: 12, ha: "center" });
+  });
+  if (st.unit === "us") {                             // idle gaps of the GPU
+    for (let i = 0; i + 1 < st.gpu.length; i++) {
+      const a = st.gpu[i][1], b = st.gpu[i + 1][0];
+      if (b <= now && st.mode === "small2") text((X(a) + X(b)) / 2, yg + h / 2, "idle", { fs: 12, ha: "center", color: MUTED });
+    }
+  }
+  // the clock
+  if (st.clock !== undefined && g > 0.5) {
+    const c = st.clock;
+    line(X(0), yc - 40, X(0), yg + h + 30, { color: ORANGE, lw: 1.2, dashed: true });
+    line(X(c), yc - 40, X(c), yg + h + 30, { color: ORANGE, lw: 1.8 });
+    text(X(0) - 6, yc - 48, "clock starts", { fs: 12, color: ORANGE, ha: "right" });
+    text(X(c) + (st.mode === "wrong" ? 8 : -8), yc - 48, `clock read: ${st.mode === "wrong" ? c.toFixed(3) : c.toFixed(2)} ms`,
+      { fs: 13, color: ORANGE, bold: true, ha: st.mode === "wrong" ? "left" : "right" });
+  }
+  // axis
+  const ya = yg + h + 52, tick = st.unit === "us" ? 5 : 0.5;
+  for (let s = 0; s <= tmax + EPS; s += tick) {
+    line(X(s), ya - 4, X(s), ya, { color: AXIS });
+    text(X(s), ya + 12, `${+s.toFixed(3)} ${st.unit === "us" ? "µs" : "ms"}`, { fs: 11, color: MUTED, ha: "center" });
+  }
+  if (now > EPS && now < tmax) line(X(now), yc - 6, X(now), ya - 6, { color: INK_2, lw: 0.8 });
+  const ly = 560;
+  legendItem(60, ly, JOB.B, JOB_EDGE.B, "the CPU launches a kernel");
+  legendItem(360, ly, JOB.A, JOB_EDGE.A, "the GPU runs it");
+  legendItem(600, ly, CARD, MUTED, "the CPU waits", true);
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 3. size
+function drawSize(v, t) {
+  const k = stepOf(v, t), g = growthOf(t);
+  header(v);
+  const x0 = 150, x1 = 840, y0 = 140, y1 = 600;
+  const lx0 = 3, lx1 = 9, ly0 = -4, ly1 = 3;            // log10 ranges: numbers, ms
+  const X = n => x0 + (Math.log10(n) - lx0) / (lx1 - lx0) * (x1 - x0);
+  const Y = ms => y1 - (Math.log10(ms) - ly0) / (ly1 - ly0) * (y1 - y0);
+  for (let e = ly0; e <= ly1; e++) {
+    line(x0, Y(10 ** e), x1, Y(10 ** e), { color: GRID });
+    const lab = e >= 0 ? `${10 ** e} ms` : e === -3 ? "1 µs" : e === -2 ? "10 µs" : e === -1 ? "100 µs" : "0.1 µs";
+    text(x0 - 10, Y(10 ** e), lab, { fs: 11.5, ha: "right", color: MUTED });
+  }
+  const nlab = ["1,000", "10,000", "100,000", "1M", "10M", "100M", "1B"];
+  for (let e = lx0; e <= lx1; e++) {
+    line(X(10 ** e), y1, X(10 ** e), y1 + 5, { color: AXIS });
+    text(X(10 ** e), y1 + 18, nlab[e - lx0], { fs: 11.5, ha: "center", color: MUTED });
+  }
+  text((x0 + x1) / 2, y1 + 42, "numbers in a and b", { fs: 13, ha: "center", color: INK_2 });
+  line(x0, y0, x0, y1, { color: AXIS });
+  line(x0, y1, x1, y1, { color: AXIS });
+  line(x0, Y(v.launch), x1, Y(v.launch), { color: JOB_EDGE.A, lw: 1, dashed: true, alpha: 0.6 });
+  text(x0 + 8, Y(v.launch) + 14, "launching a kernel: about 6.5 µs", { fs: 12, color: JOB_EDGE.A });
+  const pts = v.points, upto = k + (g < 1 - EPS ? g : 0);
+  const series = [[1, JOB_EDGE.A, "GPU"], [2, JOB_EDGE.B, "NumPy, one CPU thread"]];
+  for (const [col, color] of series) {
+    for (let i = 0; i < pts.length - 1 && i < upto; i++) {
+      const f = Math.min(upto - i, 1);
+      const xa = X(pts[i][0]), ya = Y(pts[i][col]), xb = X(pts[i + 1][0]), yb = Y(pts[i + 1][col]);
+      line(xa, ya, xa + (xb - xa) * f, ya + (yb - ya) * f, { color, lw: 2 });
+    }
+    for (let i = 0; i <= k; i++) {
+      rect(X(pts[i][0]) - 5, Y(pts[i][col]) - 5, 10, 10, { fill: color, stroke: "#ffffff", lw: 1, rx: 5 });
+    }
+  }
+  legendItem(x0 + 20, y0 + 6, JOB.A, JOB_EDGE.A, "GPU, the data already in its memory");
+  legendItem(x0 + 20, y0 + 32, JOB.B, JOB_EDGE.B, "NumPy, one CPU thread");
+  // the table on the right
+  const tx = 900;
+  text(tx, 150, "numbers", { fs: 13, bold: true });
+  text(tx + 220, 150, "GPU", { fs: 13, bold: true, ha: "right" });
+  text(tx + 320, 150, "NumPy", { fs: 13, bold: true, ha: "right" });
+  const fmt = ms => ms < 0.1 ? `${(ms * 1000).toFixed(1)} µs` : ms < 10 ? `${ms.toFixed(2)} ms` : `${ms.toFixed(0)} ms`;
+  for (let i = 0; i <= k; i++) {
+    const y = 180 + i * 30, p = pts[i];
+    text(tx, y, p[3], { fs: 13, color: i === k ? INK : INK_2, bold: i === k });
+    text(tx + 220, y, fmt(p[1]), { fs: 13, ha: "right", mono: true, color: i === k ? INK : INK_2 });
+    text(tx + 320, y, fmt(p[2]), { fs: 13, ha: "right", mono: true, color: i === k ? INK : INK_2 });
+  }
+  const p = pts[k], r = p[2] / p[1];
+  text(tx, 180 + 7 * 30 + 24, r >= 1 ? `GPU ${r.toFixed(r < 10 ? 1 : 0)}x faster` : `NumPy ${(1 / r).toFixed(1)}x faster`,
+    { fs: 17, bold: true });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 4. fusion
+function drawFusion(v, t) {
+  const k = stepOf(v, t), g = growthOf(t), st = v.steps[k], K = st.k;
+  const fusedView = K === 6;
+  const moved = K < 0 ? 0 : st.moved;
+  header(v, K < 0 ? "" : fusedView ? `1.6 GB, ${v.fused} ms` : K === 5 ? `${moved.toFixed(1)} GB, ${v.unfused} ms` : `${moved.toFixed(1)} GB`);
+  // the cores
+  const coreY = 140, coreH = 92, coreX = 60, coreW = W - 120;
+  rect(coreX, coreY, coreW, coreH, { fill: "#ffffff", stroke: AXIS, rx: 8 });
+  text(coreX + 16, coreY + 20, "GPU cores", { fs: 14, bold: true });
+  const kname = K < 0 ? "" : fusedView ? "one kernel: r = sqrt(x*x + y*y + z*z)" : `kernel ${K + 1} of 6:  ${v.kernels[K][0]}`;
+  if (kname) text(coreX + coreW / 2, coreY + 56, kname, { fs: 18, ha: "center", mono: true, bold: true });
+  // the memory and its arrays
+  const memY = 400, memH = 150;
+  rect(60, memY, W - 120, memH, { fill: CARD, stroke: AXIS, rx: 8 });
+  text(76, memY + memH - 16, "GPU memory", { fs: 14, bold: true });
+  const names = ["x", "y", "z", "t1", "t2", "t3", "t4", "t5", "r"];
+  const exists = new Set(["x", "y", "z"]);
+  if (!fusedView) for (let i = 0; i <= K && i < 6; i++) exists.add(v.kernels[i][2]);
+  else exists.add("r");
+  const ins = K < 0 ? [] : fusedView ? ["x", "y", "z"] : v.kernels[K][1];
+  const outp = K < 0 ? null : fusedView ? "r" : v.kernels[K][2];
+  const bw = 100, gapx = 20, bx0 = (W - (names.length * bw + (names.length - 1) * gapx)) / 2;
+  const BX = i => bx0 + i * (bw + gapx);
+  names.forEach((n, i) => {
+    const x = BX(i), y = memY + 50;
+    const here = exists.has(n) && !(n === outp && g < 0.5);
+    const active = ins.includes(n) || n === outp;
+    if (!here) { rect(x, y, bw, 70, { fill: "none", stroke: GRID, dash: "4 4" }); return; }
+    const fill = ["x", "y", "z"].includes(n) ? JOB.C : n === "r" ? JOB.D : "#ffffff";
+    rect(x, y, bw, 70, { fill, stroke: active ? INK : AXIS, lw: active ? 2 : 1 });
+    text(x + bw / 2, y + 26, n, { fs: 18, ha: "center", mono: true, bold: true });
+    text(x + bw / 2, y + 52, "400 MB", { fs: 11.5, ha: "center", color: INK_2 });
+  });
+  // arrows: reads go up, the write comes down
+  const yTop = coreY + coreH + 6, yBot = memY + 44;
+  ins.forEach(n => {
+    const x = BX(names.indexOf(n)) + bw / 2 - 12;
+    line(x, yBot, x, yTop, { color: JOB_EDGE.C, lw: 2 });
+    arrowHead(x, yTop, -1, JOB_EDGE.C);
+    const f = Math.min(g / 0.5, 1);
+    if (g < 1 - EPS) rect(x - 6, yBot - (yBot - yTop) * f - 6, 12, 12, { fill: JOB.C, stroke: JOB_EDGE.C, rx: 3 });
+  });
+  if (outp) {
+    const x = BX(names.indexOf(outp)) + bw / 2 + 12;
+    if (g >= 0.5) {
+      line(x, yTop, x, yBot, { color: JOB_EDGE.D, lw: 2 });
+      arrowHead(x, yBot, 1, JOB_EDGE.D);
+      const f = Math.min((g - 0.5) / 0.5, 1);
+      if (g < 1 - EPS) rect(x - 6, yTop + (yBot - yTop) * f - 6, 12, 12, { fill: JOB.D, stroke: JOB_EDGE.D, rx: 3 });
+    }
+  }
+  // bars: bytes moved, unfused and fused
+  const barY = 600, bx = 300, scaleX = 600 / 6.0;
+  text(bx - 14, barY + 12, "six kernels", { fs: 13, ha: "right", color: INK_2 });
+  text(bx - 14, barY + 46, "one kernel", { fs: 13, ha: "right", color: INK_2 });
+  const unf = fusedView ? 5.6 : moved;
+  if (unf > 0) {
+    rect(bx, barY, unf * scaleX, 24, { fill: JOB.B, stroke: JOB_EDGE.B, lw: 0.75 });
+    text(bx + unf * scaleX + 10, barY + 12, `${unf.toFixed(1)} GB${fusedView || K === 5 ? `, ${v.unfused} ms` : ""}`, { fs: 13 });
+  }
+  if (fusedView) {
+    rect(bx, barY + 34, 1.6 * scaleX * Math.min(g / 0.6, 1), 24, { fill: JOB.D, stroke: JOB_EDGE.D, lw: 0.75 });
+    if (g > 0.6) text(bx + 1.6 * scaleX + 10, barY + 46, `1.6 GB, ${v.fused} ms`, { fs: 13 });
+  }
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+const DRAW = { warps: drawWarps, launch: drawLaunch, size: drawSize, fusion: drawFusion };
+const VIEWS = DATA.order.map(id => ({
+  id, label: DATA.views[id].label, tmax: DATA.views[id].steps.length - 0.001, snap: 0.001, unit: "steps",
+  speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw: t => DRAW[id](DATA.views[id], t),
+  seek: x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (DATA.views[id].steps.length - 1)), 0), DATA.views[id].steps.length - 1),
+}));
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
