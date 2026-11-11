@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Dask, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (built by make_policies.py, make_mlfq.py, make_multicore.py).
+   Same layout and controls as template.html (the Linux page): views, the 1280x720 stage (the video's
+   frame, light in both themes), the current step, the controls, then every step and a note on the model. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 12ch; font-variant-numeric: tabular-nums; }
+.speed .hint { font-size: 13px; color: var(--muted); }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+  .speed .hint { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Dask, Step by Step</h1>
+      <p>What happens when the data do not fit in a job's memory? Where the data and the work are when Dask answers a question, and what the size of its tasks costs. Measured on our cluster.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+      <span class="hint" id="speedHint"></span>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Time in the simulation">
+    </div>
+    <p class="keys">Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>4</kbd> to change view. Click a timeline to jump to that moment.</p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the measurements and the models</h2>
+    <p><b>Where.</b> julia, a node of our cluster, 10 and 11 November 2026. A job with 4 CPUs and the default memory (3.77 GB), as you submit it. Data: 100 million synthetic taxi trips in 100 Parquet files, 1.92 GB on disk and 3.8 GB in pandas. Question: the mean fare of each pickup zone (263 zones). Times are medians of 5 runs, with the libraries already imported.</p>
+    <p><b>Memory view.</b> Measured: pandas reading every column, 22.8 s in a job with 3.77 GB, 6.4 GB pushed to swap; 2.34 s and 10.3 GB with --mem=16G. Dask with 4 threads, 1.04 s and 1.2 GB. The file-by-file growth in between is a schematic: pandas reads the files with pyarrow, then builds its own copy.</p>
+    <p><b>Task graph.</b> Simulated: 20 ms per load, 10 ms per sum, 5 ms per add, and a free worker takes the first ready task in Dask's order (finish a branch before starting a new one).</p>
+    <p><b>groupby.</b> Dask 2026.8 plans the question on 100 partitions as GroupByChunk, a shuffle into 3 partitions and Aggregate; with split_out=1, as a tree (TreeReduce, 8 at a time). The view draws 8 partitions and 6 zones.</p>
+    <p><b>Chunk size.</b> The model has one number, 0.2 ms for the scheduler to hand out each task, measured with chunks of 1,000 numbers (100,000 tasks, 20.4 s). It matches 1,000 and 1 chunks and is faster than the measurement for 100 chunks (0.07 s against 0.11 s).</p>
+    <p>Data files: lecture18/measure (README.md, rep-j2-28219.out, lim-j-28394.out, with-import/rep-j-28212.out).</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"key":"dask","order":["memory","graph","groupby","chunks"],"views":{"memory":{"label":"Memory","title":"Who holds the table?","sub":"the same question in a job with 4 CPUs and 3.77 GB: pandas, then Dask with 4 threads","pandas":{"gbFile":0.1017,"fast":0.02,"slow":0.34416875,"tLimit":0.7413962635201574,"limitFiles":37.06981317600787,"readEnd":22.400000000000002,"total":22.8,"swapped":6.4},"dask":{"threads":4,"perFile":0.0416,"total":1.04,"peak":1.2},"limit":3.77,"tmax":24,"steps":[{"clock":0,"text":"A job with 4 CPUs and the default memory, 3.77 GB. The data: 100 Parquet files, 3.8 GB once in pandas. Left, pandas; right, Dask. Schematic: the files are read one by one, and the times and memory at the end are measured.","t":0,"label":"step 1"},{"clock":0.5,"text":"pandas reads every file into one table, and its memory grows with each file. Dask's 4 threads each read one file, keep only its sums and counts by zone, a few kilobytes, and move on to the next file.","t":1,"label":"step 2"},{"clock":1.04,"text":"Dask has finished: 1.04 s, and never more than 1.2 GB. pandas has just filled the job's memory, after about 37 of the 100 files.","t":2,"label":"step 3"},{"clock":6.0,"text":"pandas keeps reading. Linux moves pages of the job to swap, on disk, and brings them back when they are needed: every file now takes about 15 times longer.","t":3,"label":"step 4"},{"clock":22.8,"text":"pandas finishes after 22.8 s, with 6.4 GB in swap. With --mem=16G it takes 2.34 s and peaks at 10.3 GB, 2.7 times the table. Dask needed 1.2 GB and 1.04 s.","t":4,"label":"step 5"}]},"graph":{"label":"Task graph","title":"A task graph on 4 workers","sub":"dask.delayed records each call as a task; compute() runs the graph","tasks":[{"name":"load 1","row":0,"col":0,"a":0.0,"b":20.0,"w":0,"inputs":[]},{"name":"load 2","row":0,"col":1,"a":0.0,"b":20.0,"w":1,"inputs":[]},{"name":"load 3","row":0,"col":2,"a":0.0,"b":20.0,"w":2,"inputs":[]},{"name":"load 4","row":0,"col":3,"a":0.0,"b":20.0,"w":3,"inputs":[]},{"name":"sums 1","row":1,"col":0,"a":20.0,"b":30.0,"w":0,"inputs":["load 1"]},{"name":"sums 2","row":1,"col":1,"a":20.0,"b":30.0,"w":1,"inputs":["load 2"]},{"name":"sums 3","row":1,"col":2,"a":20.0,"b":30.0,"w":2,"inputs":["load 3"]},{"name":"sums 4","row":1,"col":3,"a":20.0,"b":30.0,"w":3,"inputs":["load 4"]},{"name":"add 1","row":2,"col":0.5,"a":30.0,"b":35.0,"w":0,"inputs":["sums 1","sums 2"]},{"name":"add 2","row":2,"col":2.5,"a":30.0,"b":35.0,"w":1,"inputs":["sums 3","sums 4"]},{"name":"load 5","row":0,"col":4,"a":30.0,"b":50.0,"w":2,"inputs":[]},{"name":"load 6","row":0,"col":5,"a":30.0,"b":50.0,"w":3,"inputs":[]},{"name":"add 5","row":3,"col":1.5,"a":35.0,"b":40.0,"w":0,"inputs":["add 1","add 2"]},{"name":"load 7","row":0,"col":6,"a":35.0,"b":55.0,"w":1,"inputs":[]},{"name":"load 8","row":0,"col":7,"a":40.0,"b":60.0,"w":0,"inputs":[]},{"name":"sums 5","row":1,"col":4,"a":50.0,"b":60.0,"w":2,"inputs":["load 5"]},{"name":"sums 6","row":1,"col":5,"a":50.0,"b":60.0,"w":3,"inputs":["load 6"]},{"name":"sums 7","row":1,"col":6,"a":55.0,"b":65.0,"w":1,"inputs":["load 7"]},{"name":"add 3","row":2,"col":4.5,"a":60.0,"b":65.0,"w":0,"inputs":["sums 5","sums 6"]},{"name":"sums 8","row":1,"col":7,"a":60.0,"b":70.0,"w":2,"inputs":["load 8"]},{"name":"add 4","row":2,"col":6.5,"a":70.0,"b":75.0,"w":0,"inputs":["sums 7","sums 8"]},{"name":"add 6","row":3,"col":5.5,"a":75.0,"b":80.0,"w":0,"inputs":["add 3","add 4"]},{"name":"mean","row":4,"col":3.5,"a":80.0,"b":85.0,"w":0,"inputs":["add 5","add 6"]}],"tmax":90,"steps":[{"clock":0,"text":"A graph of 23 tasks: load 8 files, compute the sums and counts of each, then add the results two at a time. 4 workers. A task can start only when all its inputs are done.","t":0,"label":"step 1"},{"clock":10,"text":"At the start only the loads are ready (black outline). Each worker takes one, in Dask's order.","t":1,"label":"step 2"},{"clock":20,"text":"Loads 1-4 are done. Their sums are now ready, and Dask runs them before it loads more files: it finishes a branch first, so it can free the loaded data sooner.","t":2,"label":"step 3"},{"clock":30,"text":"Sums 1-4 are done, and the loaded files 1-4 are freed (grey). add 1 and add 2 are ready; the other two workers start loads 5 and 6.","t":3,"label":"step 4"},{"clock":40,"text":"add 5 adds the results of add 1 and add 2, and those are freed. Workers 1 and 2 go back to loading.","t":4,"label":"step 5"},{"clock":50,"text":"Loads 5 and 6 are done; their sums start at once. Worker 2 is still loading file 7, worker 1 file 8.","t":5,"label":"step 6"},{"clock":60,"text":"Sums 5 and 6 are done, and add 3 is ready. Each worker takes the next ready task as soon as it is free; worker 4 finds none, and waits.","t":6,"label":"step 7"},{"clock":70,"text":"Only a few tasks are left, and fewer than 4 are ready at a time: workers wait. The end of a graph is serial, as in Amdahl's law.","t":7,"label":"step 8"},{"clock":80,"text":"The last adds run on one worker, one after the other: each needs the one before.","t":8,"label":"step 9"},{"clock":85.0,"text":"Done after 85 ms. At most 4 loaded files were in memory at any time, never all 8. The workers were busy 81% of the time.","t":9,"label":"step 10"}]},"groupby":{"label":"groupby","title":"groupby is map, shuffle, reduce","sub":"trips.groupby(\"pu_zone\")[\"fare\"].mean(), 8 partitions, 6 zones","parts":8,"outs":3,"zones":6,"steps":[{"clock":0,"text":"8 partitions of trips (our data have 100). Every partition has trips from every zone. The question: the mean fare of each zone.","t":0,"label":"step 1"},{"clock":1,"text":"Map: in each partition, pandas computes the sum and the count of the fares of each zone (Dask's GroupByChunk). 8 small tables, one per partition.","t":1,"label":"step 2"},{"clock":2,"text":"Shuffle: each small table is split by zone, and every piece goes to the partition that owns its zones. Here 3 partitions, as Dask planned for our 100 files: 8 x 3 pieces move.","t":2,"label":"step 3"},{"clock":3,"text":"Reduce: each of the 3 partitions adds the sums and the counts of its zones, and divides: the means (Aggregate). Map, shuffle, reduce: MapReduce.","t":3,"label":"step 4"},{"clock":4,"text":"With few groups (we have 263 zones) a tree does the same job: the small tables are added a few at a time until one is left (split_out=1; Dask adds 8 at a time).","t":4,"label":"step 5"},{"clock":5,"text":"Measured, 100 partitions, 4 CPUs: with threads 1.04 s (shuffle) and 1.03 s (tree); with 4 processes 2.22 s and 1.97 s. The shuffle is what scales when the groups are millions.","t":5,"label":"step 6"}]},"chunks":{"label":"Chunk size","title":"Chunk size","sub":"dask.array: x.sum() of 100 million numbers, 4 threads (a model with 0.2 ms per task; the measured times at the end)","panels":[{"n":1000,"work":0.24,"sched":[[0.0,200.0]],"segs":[[0,0.2,0.44],[1,0.4,0.64],[2,0.6,0.84],[3,0.8,1.04],[0,1.0,1.24],[1,1.2,1.44],[2,1.4,1.64],[3,1.6,1.84],[0,1.8,2.04],[1,2.0,2.24],[2,2.2,2.44],[3,2.4,2.64],[0,2.6,2.84],[1,2.8,3.04],[2,3.0,3.24],[3,3.2,3.44],[0,3.4,3.64],[1,3.6,3.84],[2,3.8,4.04],[3,4.0,4.24],[0,4.2,4.44],[1,4.4,4.64],[2,4.6,4.84],[3,4.8,5.04],[0,5.0,5.24],[1,5.2,5.44],[2,5.4,5.64],[3,5.6,5.84],[0,5.8,6.04],[1,6.0,6.24],[2,6.2,6.44],[3,6.4,6.64],[0,6.6,6.84],[1,6.8,7.04],[2,7.0,7.24],[3,7.2,7.44],[0,7.4,7.64],[1,7.6,7.84],[2,7.8,8.04],[3,8.0,8.24],[0,8.2,8.44],[1,8.4,8.64],[2,8.6,8.84],[3,8.8,9.04],[0,9.0,9.24],[1,9.2,9.44],[2,9.4,9.64],[3,9.6,9.84],[0,9.8,10.04],[1,10.0,10.24],[2,10.2,10.44],[3,10.4,10.64],[0,10.6,10.84],[1,10.8,11.04],[2,11.0,11.24],[3,11.2,11.44],[0,11.4,11.64],[1,11.6,11.84],[2,11.8,12.04],[3,12.0,12.24],[0,12.2,12.44],[1,12.4,12.64],[2,12.6,12.84],[3,12.8,13.04],[0,13.0,13.24],[1,13.2,13.44],[2,13.4,13.64],[3,13.6,13.84],[0,13.8,14.04],[1,14.0,14.24],[2,14.2,14.44],[3,14.4,14.64],[0,14.6,14.84],[1,14.8,15.04],[2,15.0,15.24],[3,15.2,15.44],[0,15.4,15.64],[1,15.6,15.84],[2,15.8,16.04],[3,16.0,16.24],[0,16.2,16.44],[1,16.4,16.64],[2,16.6,16.84],[3,16.8,17.04],[0,17.0,17.24],[1,17.2,17.44],[2,17.4,17.64],[3,17.6,17.84],[0,17.8,18.04],[1,18.0,18.24],[2,18.2,18.44],[3,18.4,18.64],[0,18.6,18.84],[1,18.8,19.04],[2,19.0,19.24],[3,19.2,19.44],[0,19.4,19.64],[1,19.6,19.84],[2,19.8,20.04],[3,20.0,20.24],[0,20.2,20.44],[1,20.4,20.64],[2,20.6,20.84],[3,20.8,21.04],[0,21.0,21.24],[1,21.2,21.44],[2,21.4,21.64],[3,21.6,21.84],[0,21.8,22.04],[1,22.0,22.24],[2,22.2,22.44],[3,22.4,22.64],[0,22.6,22.84],[1,22.8,23.04],[2,23.0,23.24],[3,23.2,23.44],[0,23.4,23.64],[1,23.6,23.84],[2,23.8,24.04],[3,24.0,24.24],[0,24.2,24.44],[1,24.4,24.64],[2,24.6,24.84],[3,24.8,25.04],[0,25.0,25.24],[1,25.2,25.44],[2,25.4,25.64],[3,25.6,25.84],[0,25.8,26.04],[1,26.0,26.24],[2,26.2,26.44],[3,26.4,26.64],[0,26.6,26.84],[1,26.8,27.04],[2,27.0,27.24],[3,27.2,27.44],[0,27.4,27.64],[1,27.6,27.84],[2,27.8,28.04],[3,28.0,28.24],[0,28.2,28.44],[1,28.4,28.64],[2,28.6,28.84],[3,28.8,29.04],[0,29.0,29.24],[1,29.2,29.44],[2,29.4,29.64],[3,29.6,29.84],[0,29.8,30.04],[1,30.0,30.24],[2,30.2,30.44],[3,30.4,30.64],[0,30.6,30.84],[1,30.8,31.04],[2,31.0,31.24],[3,31.2,31.44],[0,31.4,31.64],[1,31.6,31.84],[2,31.8,32.04],[3,32.0,32.24],[0,32.2,32.44],[1,32.4,32.64],[2,32.6,32.84],[3,32.8,33.04],[0,33.0,33.24],[1,33.2,33.44],[2,33.4,33.64],[3,33.6,33.84],[0,33.8,34.04],[1,34.0,34.24],[2,34.2,34.44],[3,34.4,34.64],[0,34.6,34.84],[1,34.8,35.04],[2,35.0,35.24],[3,35.2,35.44],[0,35.4,35.64],[1,35.6,35.84],[2,35.8,36.04],[3,36.0,36.24],[0,36.2,36.44],[1,36.4,36.64],[2,36.6,36.84],[3,36.8,37.04],[0,37.0,37.24],[1,37.2,37.44],[2,37.4,37.64],[3,37.6,37.84],[0,37.8,38.04],[1,38.0,38.24],[2,38.2,38.44],[3,38.4,38.64],[0,38.6,38.84],[1,38.8,39.04],[2,39.0,39.24],[3,39.2,39.44],[0,39.4,39.64],[1,39.6,39.84],[2,39.8,40.04],[3,40.0,40.24],[0,40.2,40.44],[1,40.4,40.64],[2,40.6,40.84],[3,40.8,41.04],[0,41.0,41.24],[1,41.2,41.44],[2,41.4,41.64],[3,41.6,41.84],[0,41.8,42.04],[1,42.0,42.24],[2,42.2,42.44],[3,42.4,42.64],[0,42.6,42.84],[1,42.8,43.04],[2,43.0,43.24],[3,43.2,43.44],[0,43.4,43.64],[1,43.6,43.84],[2,43.8,44.04],[3,44.0,44.24],[0,44.2,44.44],[1,44.4,44.64],[2,44.6,44.84],[3,44.8,45.04],[0,45.0,45.24],[1,45.2,45.44],[2,45.4,45.64],[3,45.6,45.84],[0,45.8,46.04],[1,46.0,46.24],[2,46.2,46.44],[3,46.4,46.64],[0,46.6,46.84],[1,46.8,47.04],[2,47.0,47.24],[3,47.2,47.44],[0,47.4,47.64],[1,47.6,47.84],[2,47.8,48.04],[3,48.0,48.24],[0,48.2,48.44],[1,48.4,48.64],[2,48.6,48.84],[3,48.8,49.04],[0,49.0,49.24],[1,49.2,49.44],[2,49.4,49.64],[3,49.6,49.84],[0,49.8,50.04],[1,50.0,50.24],[2,50.2,50.44],[3,50.4,50.64],[0,50.6,50.84],[1,50.8,51.04],[2,51.0,51.24],[3,51.2,51.44],[0,51.4,51.64],[1,51.6,51.84],[2,51.8,52.04],[3,52.0,52.24],[0,52.2,52.44],[1,52.4,52.64],[2,52.6,52.84],[3,52.8,53.04],[0,53.0,53.24],[1,53.2,53.44],[2,53.4,53.64],[3,53.6,53.84],[0,53.8,54.04],[1,54.0,54.24],[2,54.2,54.44],[3,54.4,54.64],[0,54.6,54.84],[1,54.8,55.04],[2,55.0,55.24],[3,55.2,55.44],[0,55.4,55.64],[1,55.6,55.84],[2,55.8,56.04],[3,56.0,56.24],[0,56.2,56.44],[1,56.4,56.64],[2,56.6,56.84],[3,56.8,57.04],[0,57.0,57.24],[1,57.2,57.44],[2,57.4,57.64],[3,57.6,57.84],[0,57.8,58.04],[1,58.0,58.24],[2,58.2,58.44],[3,58.4,58.64],[0,58.6,58.84],[1,58.8,59.04],[2,59.0,59.24],[3,59.2,59.44],[0,59.4,59.64],[1,59.6,59.84],[2,59.8,60.04],[3,60.0,60.24],[0,60.2,60.44],[1,60.4,60.64],[2,60.6,60.84],[3,60.8,61.04],[0,61.0,61.24],[1,61.2,61.44],[2,61.4,61.64],[3,61.6,61.84],[0,61.8,62.04],[1,62.0,62.24],[2,62.2,62.44],[3,62.4,62.64],[0,62.6,62.84],[1,62.8,63.04],[2,63.0,63.24],[3,63.2,63.44],[0,63.4,63.64],[1,63.6,63.84],[2,63.8,64.04],[3,64.0,64.24],[0,64.2,64.44],[1,64.4,64.64],[2,64.6,64.84],[3,64.8,65.04],[0,65.0,65.24],[1,65.2,65.44],[2,65.4,65.64],[3,65.6,65.84],[0,65.8,66.04],[1,66.0,66.24],[2,66.2,66.44],[3,66.4,66.64],[0,66.6,66.84],[1,66.8,67.04],[2,67.0,67.24],[3,67.2,67.44],[0,67.4,67.64],[1,67.6,67.84],[2,67.8,68.04],[3,68.0,68.24],[0,68.2,68.44],[1,68.4,68.64],[2,68.6,68.84],[3,68.8,69.04],[0,69.0,69.24],[1,69.2,69.44],[2,69.4,69.64],[3,69.6,69.84],[0,69.8,70.04],[1,70.0,70.24],[2,70.2,70.44],[3,70.4,70.64],[0,70.6,70.84],[1,70.8,71.04],[2,71.0,71.24],[3,71.2,71.44],[0,71.4,71.64],[1,71.6,71.84],[2,71.8,72.04],[3,72.0,72.24],[0,72.2,72.44],[1,72.4,72.64],[2,72.6,72.84],[3,72.8,73.04],[0,73.0,73.24],[1,73.2,73.44],[2,73.4,73.64],[3,73.6,73.84],[0,73.8,74.04],[1,74.0,74.24],[2,74.2,74.44],[3,74.4,74.64],[0,74.6,74.84],[1,74.8,75.04],[2,75.0,75.24],[3,75.2,75.44],[0,75.4,75.64],[1,75.6,75.84],[2,75.8,76.04],[3,76.0,76.24],[0,76.2,76.44],[1,76.4,76.64],[2,76.6,76.84],[3,76.8,77.04],[0,77.0,77.24],[1,77.2,77.44],[2,77.4,77.64],[3,77.6,77.84],[0,77.8,78.04],[1,78.0,78.24],[2,78.2,78.44],[3,78.4,78.64],[0,78.6,78.84],[1,78.8,79.04],[2,79.0,79.24],[3,79.2,79.44],[0,79.4,79.64],[1,79.6,79.84],[2,79.8,80.04],[3,80.0,80.24],[0,80.2,80.44],[1,80.4,80.64],[2,80.6,80.84],[3,80.8,81.04],[0,81.0,81.24],[1,81.2,81.44],[2,81.4,81.64],[3,81.6,81.84],[0,81.8,82.04],[1,82.0,82.24],[2,82.2,82.44],[3,82.4,82.64],[0,82.6,82.84],[1,82.8,83.04],[2,83.0,83.24],[3,83.2,83.44],[0,83.4,83.64],[1,83.6,83.84],[2,83.8,84.04],[3,84.0,84.24],[0,84.2,84.44],[1,84.4,84.64],[2,84.6,84.84],[3,84.8,85.04],[0,85.0,85.24],[1,85.2,85.44],[2,85.4,85.64],[3,85.6,85.84],[0,85.8,86.04],[1,86.0,86.24],[2,86.2,86.44],[3,86.4,86.64],[0,86.6,86.84],[1,86.8,87.04],[2,87.0,87.24],[3,87.2,87.44],[0,87.4,87.64],[1,87.6,87.84],[2,87.8,88.04],[3,88.0,88.24],[0,88.2,88.44],[1,88.4,88.64],[2,88.6,88.84],[3,88.8,89.04],[0,89.0,89.24],[1,89.2,89.44],[2,89.4,89.64],[3,89.6,89.84],[0,89.8,90.04],[1,90.0,90.24],[2,90.2,90.44],[3,90.4,90.64],[0,90.6,90.84],[1,90.8,91.04],[2,91.0,91.24],[3,91.2,91.44],[0,91.4,91.64],[1,91.6,91.84],[2,91.8,92.04],[3,92.0,92.24],[0,92.2,92.44],[1,92.4,92.64],[2,92.6,92.84],[3,92.8,93.04],[0,93.0,93.24],[1,93.2,93.44],[2,93.4,93.64],[3,93.6,93.84],[0,93.8,94.04],[1,94.0,94.24],[2,94.2,94.44],[3,94.4,94.64],[0,94.6,94.84],[1,94.8,95.04],[2,95.0,95.24],[3,95.2,95.44],[0,95.4,95.64],[1,95.6,95.84],[2,95.8,96.04],[3,96.0,96.24],[0,96.2,96.44],[1,96.4,96.64],[2,96.6,96.84],[3,96.8,97.04],[0,97.0,97.24],[1,97.2,97.44],[2,97.4,97.64],[3,97.6,97.84],[0,97.8,98.04],[1,98.0,98.24],[2,98.2,98.44],[3,98.4,98.64],[0,98.6,98.84],[1,98.8,99.04],[2,99.0,99.24],[3,99.2,99.44],[0,99.4,99.64],[1,99.6,99.84],[2,99.8,100.04],[3,100.0,100.24],[0,100.2,100.44],[1,100.4,100.64],[2,100.6,100.84],[3,100.8,101.04],[0,101.0,101.24],[1,101.2,101.44],[2,101.4,101.64],[3,101.6,101.84],[0,101.8,102.04],[1,102.0,102.24],[2,102.2,102.44],[3,102.4,102.64],[0,102.6,102.84],[1,102.8,103.04],[2,103.0,103.24],[3,103.2,103.44],[0,103.4,103.64],[1,103.6,103.84],[2,103.8,104.04],[3,104.0,104.24],[0,104.2,104.44],[1,104.4,104.64],[2,104.6,104.84],[3,104.8,105.04],[0,105.0,105.24],[1,105.2,105.44],[2,105.4,105.64],[3,105.6,105.84],[0,105.8,106.04],[1,106.0,106.24],[2,106.2,106.44],[3,106.4,106.64],[0,106.6,106.84],[1,106.8,107.04],[2,107.0,107.24],[3,107.2,107.44],[0,107.4,107.64],[1,107.6,107.84],[2,107.8,108.04],[3,108.0,108.24],[0,108.2,108.44],[1,108.4,108.64],[2,108.6,108.84],[3,108.8,109.04],[0,109.0,109.24],[1,109.2,109.44],[2,109.4,109.64],[3,109.6,109.84],[0,109.8,110.04],[1,110.0,110.24],[2,110.2,110.44],[3,110.4,110.64],[0,110.6,110.84],[1,110.8,111.04],[2,111.0,111.24],[3,111.2,111.44],[0,111.4,111.64],[1,111.6,111.84],[2,111.8,112.04],[3,112.0,112.24],[0,112.2,112.44],[1,112.4,112.64],[2,112.6,112.84],[3,112.8,113.04],[0,113.0,113.24],[1,113.2,113.44],[2,113.4,113.64],[3,113.6,113.84],[0,113.8,114.04],[1,114.0,114.24],[2,114.2,114.44],[3,114.4,114.64],[0,114.6,114.84],[1,114.8,115.04],[2,115.0,115.24],[3,115.2,115.44],[0,115.4,115.64],[1,115.6,115.84],[2,115.8,116.04],[3,116.0,116.24],[0,116.2,116.44],[1,116.4,116.64],[2,116.6,116.84],[3,116.8,117.04],[0,117.0,117.24],[1,117.2,117.44],[2,117.4,117.64],[3,117.6,117.84],[0,117.8,118.04],[1,118.0,118.24],[2,118.2,118.44],[3,118.4,118.64],[0,118.6,118.84],[1,118.8,119.04],[2,119.0,119.24],[3,119.2,119.44],[0,119.4,119.64],[1,119.6,119.84],[2,119.8,120.04],[3,120.0,120.24],[0,120.2,120.44],[1,120.4,120.64],[2,120.6,120.84],[3,120.8,121.04],[0,121.0,121.24],[1,121.2,121.44],[2,121.4,121.64],[3,121.6,121.84],[0,121.8,122.04],[1,122.0,122.24],[2,122.2,122.44],[3,122.4,122.64],[0,122.6,122.84],[1,122.8,123.04],[2,123.0,123.24],[3,123.2,123.44],[0,123.4,123.64],[1,123.6,123.84],[2,123.8,124.04],[3,124.0,124.24],[0,124.2,124.44],[1,124.4,124.64],[2,124.6,124.84],[3,124.8,125.04],[0,125.0,125.24],[1,125.2,125.44],[2,125.4,125.64],[3,125.6,125.84],[0,125.8,126.04],[1,126.0,126.24],[2,126.2,126.44],[3,126.4,126.64],[0,126.6,126.84],[1,126.8,127.04],[2,127.0,127.24],[3,127.2,127.44],[0,127.4,127.64],[1,127.6,127.84],[2,127.8,128.04],[3,128.0,128.24],[0,128.2,128.44],[1,128.4,128.64],[2,128.6,128.84],[3,128.8,129.04],[0,129.0,129.24],[1,129.2,129.44],[2,129.4,129.64],[3,129.6,129.84],[0,129.8,130.04],[1,130.0,130.24],[2,130.2,130.44],[3,130.4,130.64],[0,130.6,130.84],[1,130.8,131.04],[2,131.0,131.24],[3,131.2,131.44],[0,131.4,131.64],[1,131.6,131.84],[2,131.8,132.04],[3,132.0,132.24],[0,132.2,132.44],[1,132.4,132.64],[2,132.6,132.84],[3,132.8,133.04],[0,133.0,133.24],[1,133.2,133.44],[2,133.4,133.64],[3,133.6,133.84],[0,133.8,134.04],[1,134.0,134.24],[2,134.2,134.44],[3,134.4,134.64],[0,134.6,134.84],[1,134.8,135.04],[2,135.0,135.24],[3,135.2,135.44],[0,135.4,135.64],[1,135.6,135.84],[2,135.8,136.04],[3,136.0,136.24],[0,136.2,136.44],[1,136.4,136.64],[2,136.6,136.84],[3,136.8,137.04],[0,137.0,137.24],[1,137.2,137.44],[2,137.4,137.64],[3,137.6,137.84],[0,137.8,138.04],[1,138.0,138.24],[2,138.2,138.44],[3,138.4,138.64],[0,138.6,138.84],[1,138.8,139.04],[2,139.0,139.24],[3,139.2,139.44],[0,139.4,139.64],[1,139.6,139.84],[2,139.8,140.04],[3,140.0,140.24],[0,140.2,140.44],[1,140.4,140.64],[2,140.6,140.84],[3,140.8,141.04],[0,141.0,141.24],[1,141.2,141.44],[2,141.4,141.64],[3,141.6,141.84],[0,141.8,142.04],[1,142.0,142.24],[2,142.2,142.44],[3,142.4,142.64],[0,142.6,142.84],[1,142.8,143.04],[2,143.0,143.24],[3,143.2,143.44],[0,143.4,143.64],[1,143.6,143.84],[2,143.8,144.04],[3,144.0,144.24],[0,144.2,144.44],[1,144.4,144.64],[2,144.6,144.84],[3,144.8,145.04],[0,145.0,145.24],[1,145.2,145.44],[2,145.4,145.64],[3,145.6,145.84],[0,145.8,146.04],[1,146.0,146.24],[2,146.2,146.44],[3,146.4,146.64],[0,146.6,146.84],[1,146.8,147.04],[2,147.0,147.24],[3,147.2,147.44],[0,147.4,147.64],[1,147.6,147.84],[2,147.8,148.04],[3,148.0,148.24],[0,148.2,148.44],[1,148.4,148.64],[2,148.6,148.84],[3,148.8,149.04],[0,149.0,149.24],[1,149.2,149.44],[2,149.4,149.64],[3,149.6,149.84],[0,149.8,150.04],[1,150.0,150.24],[2,150.2,150.44],[3,150.4,150.64],[0,150.6,150.84],[1,150.8,151.04],[2,151.0,151.24],[3,151.2,151.44],[0,151.4,151.64],[1,151.6,151.84],[2,151.8,152.04],[3,152.0,152.24],[0,152.2,152.44],[1,152.4,152.64],[2,152.6,152.84],[3,152.8,153.04],[0,153.0,153.24],[1,153.2,153.44],[2,153.4,153.64],[3,153.6,153.84],[0,153.8,154.04],[1,154.0,154.24],[2,154.2,154.44],[3,154.4,154.64],[0,154.6,154.84],[1,154.8,155.04],[2,155.0,155.24],[3,155.2,155.44],[0,155.4,155.64],[1,155.6,155.84],[2,155.8,156.04],[3,156.0,156.24],[0,156.2,156.44],[1,156.4,156.64],[2,156.6,156.84],[3,156.8,157.04],[0,157.0,157.24],[1,157.2,157.44],[2,157.4,157.64],[3,157.6,157.84],[0,157.8,158.04],[1,158.0,158.24],[2,158.2,158.44],[3,158.4,158.64],[0,158.6,158.84],[1,158.8,159.04],[2,159.0,159.24],[3,159.2,159.44],[0,159.4,159.64],[1,159.6,159.84],[2,159.8,160.04],[3,160.0,160.24],[0,160.2,160.44],[1,160.4,160.64],[2,160.6,160.84],[3,160.8,161.04],[0,161.0,161.24],[1,161.2,161.44],[2,161.4,161.64],[3,161.6,161.84],[0,161.8,162.04],[1,162.0,162.24],[2,162.2,162.44],[3,162.4,162.64],[0,162.6,162.84],[1,162.8,163.04],[2,163.0,163.24],[3,163.2,163.44],[0,163.4,163.64],[1,163.6,163.84],[2,163.8,164.04],[3,164.0,164.24],[0,164.2,164.44],[1,164.4,164.64],[2,164.6,164.84],[3,164.8,165.04],[0,165.0,165.24],[1,165.2,165.44],[2,165.4,165.64],[3,165.6,165.84],[0,165.8,166.04],[1,166.0,166.24],[2,166.2,166.44],[3,166.4,166.64],[0,166.6,166.84],[1,166.8,167.04],[2,167.0,167.24],[3,167.2,167.44],[0,167.4,167.64],[1,167.6,167.84],[2,167.8,168.04],[3,168.0,168.24],[0,168.2,168.44],[1,168.4,168.64],[2,168.6,168.84],[3,168.8,169.04],[0,169.0,169.24],[1,169.2,169.44],[2,169.4,169.64],[3,169.6,169.84],[0,169.8,170.04],[1,170.0,170.24],[2,170.2,170.44],[3,170.4,170.64],[0,170.6,170.84],[1,170.8,171.04],[2,171.0,171.24],[3,171.2,171.44],[0,171.4,171.64],[1,171.6,171.84],[2,171.8,172.04],[3,172.0,172.24],[0,172.2,172.44],[1,172.4,172.64],[2,172.6,172.84],[3,172.8,173.04],[0,173.0,173.24],[1,173.2,173.44],[2,173.4,173.64],[3,173.6,173.84],[0,173.8,174.04],[1,174.0,174.24],[2,174.2,174.44],[3,174.4,174.64],[0,174.6,174.84],[1,174.8,175.04],[2,175.0,175.24],[3,175.2,175.44],[0,175.4,175.64],[1,175.6,175.84],[2,175.8,176.04],[3,176.0,176.24],[0,176.2,176.44],[1,176.4,176.64],[2,176.6,176.84],[3,176.8,177.04],[0,177.0,177.24],[1,177.2,177.44],[2,177.4,177.64],[3,177.6,177.84],[0,177.8,178.04],[1,178.0,178.24],[2,178.2,178.44],[3,178.4,178.64],[0,178.6,178.84],[1,178.8,179.04],[2,179.0,179.24],[3,179.2,179.44],[0,179.4,179.64],[1,179.6,179.84],[2,179.8,180.04],[3,180.0,180.24],[0,180.2,180.44],[1,180.4,180.64],[2,180.6,180.84],[3,180.8,181.04],[0,181.0,181.24],[1,181.2,181.44],[2,181.4,181.64],[3,181.6,181.84],[0,181.8,182.04],[1,182.0,182.24],[2,182.2,182.44],[3,182.4,182.64],[0,182.6,182.84],[1,182.8,183.04],[2,183.0,183.24],[3,183.2,183.44],[0,183.4,183.64],[1,183.6,183.84],[2,183.8,184.04],[3,184.0,184.24],[0,184.2,184.44],[1,184.4,184.64],[2,184.6,184.84],[3,184.8,185.04],[0,185.0,185.24],[1,185.2,185.44],[2,185.4,185.64],[3,185.6,185.84],[0,185.8,186.04],[1,186.0,186.24],[2,186.2,186.44],[3,186.4,186.64],[0,186.6,186.84],[1,186.8,187.04],[2,187.0,187.24],[3,187.2,187.44],[0,187.4,187.64],[1,187.6,187.84],[2,187.8,188.04],[3,188.0,188.24],[0,188.2,188.44],[1,188.4,188.64],[2,188.6,188.84],[3,188.8,189.04],[0,189.0,189.24],[1,189.2,189.44],[2,189.4,189.64],[3,189.6,189.84],[0,189.8,190.04],[1,190.0,190.24],[2,190.2,190.44],[3,190.4,190.64],[0,190.6,190.84],[1,190.8,191.04],[2,191.0,191.24],[3,191.2,191.44],[0,191.4,191.64],[1,191.6,191.84],[2,191.8,192.04],[3,192.0,192.24],[0,192.2,192.44],[1,192.4,192.64],[2,192.6,192.84],[3,192.8,193.04],[0,193.0,193.24],[1,193.2,193.44],[2,193.4,193.64],[3,193.6,193.84],[0,193.8,194.04],[1,194.0,194.24],[2,194.2,194.44],[3,194.4,194.64],[0,194.6,194.84],[1,194.8,195.04],[2,195.0,195.24],[3,195.2,195.44],[0,195.4,195.64],[1,195.6,195.84],[2,195.8,196.04],[3,196.0,196.24],[0,196.2,196.44],[1,196.4,196.64],[2,196.6,196.84],[3,196.8,197.04],[0,197.0,197.24],[1,197.2,197.44],[2,197.4,197.64],[3,197.6,197.84],[0,197.8,198.04],[1,198.0,198.24],[2,198.2,198.44],[3,198.4,198.64],[0,198.6,198.84],[1,198.8,199.04],[2,199.0,199.24],[3,199.2,199.44],[0,199.4,199.64],[1,199.6,199.84],[2,199.8,200.04],[3,200.0,200.24]],"end":200.2399999999972,"measured":0.22},{"n":100,"work":2.4,"sched":[[0.0,0.8],[2.6,3.4],[5.2,6.0],[7.8,8.6],[10.4,11.2],[13.0,13.8],[15.6,16.4],[18.2,19.0],[20.8,21.6],[23.4,24.2],[26.0,26.8],[28.6,29.4],[31.2,32.0],[33.8,34.6],[36.4,37.2],[39.0,39.8],[41.6,42.4],[44.2,45.0],[46.8,47.6],[49.4,50.2],[52.0,52.8],[54.6,55.4],[57.2,58.0],[59.8,60.6],[62.4,63.2]],"segs":[[0,0.2,2.6],[1,0.4,2.8],[2,0.6,3.0],[3,0.8,3.2],[0,2.8,5.2],[1,3.0,5.4],[2,3.2,5.6],[3,3.4,5.8],[0,5.4,7.8],[1,5.6,8.0],[2,5.8,8.2],[3,6.0,8.4],[0,8.0,10.4],[1,8.2,10.6],[2,8.4,10.8],[3,8.6,11.0],[0,10.6,13.0],[1,10.8,13.2],[2,11.0,13.4],[3,11.2,13.6],[0,13.2,15.6],[1,13.4,15.8],[2,13.6,16.0],[3,13.8,16.2],[0,15.8,18.2],[1,16.0,18.4],[2,16.2,18.6],[3,16.4,18.8],[0,18.4,20.8],[1,18.6,21.0],[2,18.8,21.2],[3,19.0,21.4],[0,21.0,23.4],[1,21.2,23.6],[2,21.4,23.8],[3,21.6,24.0],[0,23.6,26.0],[1,23.8,26.2],[2,24.0,26.4],[3,24.2,26.6],[0,26.2,28.6],[1,26.4,28.8],[2,26.6,29.0],[3,26.8,29.2],[0,28.8,31.2],[1,29.0,31.4],[2,29.2,31.6],[3,29.4,31.8],[0,31.4,33.8],[1,31.6,34.0],[2,31.8,34.2],[3,32.0,34.4],[0,34.0,36.4],[1,34.2,36.6],[2,34.4,36.8],[3,34.6,37.0],[0,36.6,39.0],[1,36.8,39.2],[2,37.0,39.4],[3,37.2,39.6],[0,39.2,41.6],[1,39.4,41.8],[2,39.6,42.0],[3,39.8,42.2],[0,41.8,44.2],[1,42.0,44.4],[2,42.2,44.6],[3,42.4,44.8],[0,44.4,46.8],[1,44.6,47.0],[2,44.8,47.2],[3,45.0,47.4],[0,47.0,49.4],[1,47.2,49.6],[2,47.4,49.8],[3,47.6,50.0],[0,49.6,52.0],[1,49.8,52.2],[2,50.0,52.4],[3,50.2,52.6],[0,52.2,54.6],[1,52.4,54.8],[2,52.6,55.0],[3,52.8,55.2],[0,54.8,57.2],[1,55.0,57.4],[2,55.2,57.6],[3,55.4,57.8],[0,57.4,59.8],[1,57.6,60.0],[2,57.8,60.2],[3,58.0,60.4],[0,60.0,62.4],[1,60.2,62.6],[2,60.4,62.8],[3,60.6,63.0],[0,62.6,65.0],[1,62.8,65.2],[2,63.0,65.4],[3,63.2,65.6]],"end":65.60000000000002,"measured":0.11},{"n":1,"work":240.0,"sched":[[0.0,0.2]],"segs":[[0,0.2,240.2]],"end":240.2,"measured":0.24}],"tmax":260,"steps":[{"clock":0,"text":"The same sum of 100 million numbers on 4 CPUs, in 1,000, 100 and 1 chunks. One chunk is one task. The top lane of each panel is Dask's scheduler: it hands out one task at a time, about 0.2 ms each.","t":0,"label":"step 1"},{"clock":25,"text":"1,000 chunks: each task has only 0.24 ms of work, about as long as handing it out, so the CPUs wait for the scheduler most of the time. 100 chunks: 2.4 ms of work each, all 4 CPUs busy.","t":1,"label":"step 2"},{"clock":50,"text":"1 chunk: one task, one CPU. The other three have nothing to do: Dask cannot split a task.","t":2,"label":"step 3"},{"clock":75,"text":"100 chunks are done: 0.07 s in the model, 0.11 s measured, the best of the three. 1,000 chunks: the scheduler is still handing out tasks.","t":3,"label":"step 4"},{"clock":250,"text":"1,000 chunks: 0.20 s in the model, 0.22 s measured. 1 chunk: 0.24 s, as NumPy. And 100,000 chunks of 1,000 numbers took 20.4 s: 100,000 x 0.2 ms.","t":4,"label":"step 5"}]}}};
+
+// ---- the videos' drawing constants (lecture11/media/make_videos.py) ----
+const W = 1280, K = 100 / 72;  // matplotlib sizes are in points at 100 dpi
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const JOB = { A: "#cde2fb", B: "#fbd9c9", C: "#c9eedd", D: "#e6dcf5", E: "#f6eec4" };
+const JOB_EDGE = { A: "#2a78d6", B: "#eb6834", C: "#1baf7a", D: "#8b6fc7", E: "#c9a227" };
+const REQ = "#f6eec4";  // short requests in the MLFQ boost scene
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+
+// ---- SVG helpers, in the video's coordinates (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.italic ? ` font-style="italic"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(1.6 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function box(x, y, w, h, fill, stroke = "none", lw = 1, round = false) {
+  rect(x, y, w, h, { fill, stroke, lw, rx: round ? 8 : 0 });
+}
+function token(x, y, name, size = 32, o = {}) {
+  rect(x, y, size, size, { fill: JOB[name] || REQ, stroke: o.edge || "none", lw: o.lw || 1, alpha: o.alpha, dash: o.dash });
+  text(x + size / 2, y + size / 2, name, { fs: o.fs || 14, ha: "center", alpha: o.alpha });
+}
+function latest(list, t) {
+  let hit = null;
+  for (const x of list) { if (x.t <= t + EPS) hit = x; else break; }
+  return hit;
+}
+
+// ---- the page's views and drawing (one file per page) ----
+// Dask, step by step: four views drawn from DATA (make_dask_page.py). t = step + progress; a whole t shows that
+// step complete, and the interval after it animates into the next one (as on the Lecture 17 page).
+const WK = ["A", "B", "C", "D"];            // worker / thread colours, as on the Lecture 15-17 pages
+const DONE = "#e1e0d9", CARD = "#f3f2ee";
+const GROW = 0.75;
+
+function growthOf(t) {
+  const f = t - Math.floor(t + EPS);
+  return f < 1e-6 ? 1 : Math.min(f / GROW, 1);
+}
+
+function stepAt(v, t) {                      // {k, g, now}: step index, growth, interpolated clock
+  const k = Math.min(Math.floor(t + EPS), v.steps.length - 1), g = growthOf(t);
+  const from = k > 0 ? v.steps[k - 1].clock : 0, to = v.steps[k].clock;
+  return { k, g, now: from + (to - from) * g };
+}
+
+function hatch(x, y, w, h, color = MUTED) {  // diagonal strokes over a box
+  for (let d = -h; d < w; d += 7) {
+    const xa = x + Math.max(d, 0), ya = y + h - Math.max(-d, 0);
+    const xb = x + Math.min(d + h, w), yb = y + h - Math.min(d + h, w) + d;
+    if (xb > xa) line(xa, ya, xb, yb, { color, lw: 0.6, alpha: 0.8 });
+  }
+}
+
+function header(v, clockText) {
+  text(60, 52, v.title, { fs: 28 });
+  text(60, 90, v.sub, { fs: 15, color: INK_2 });
+  if (clockText) text(W - 60, 52, clockText, { fs: 22, ha: "right", mono: true });
+}
+
+function axis(x0, x1, y, tmax, tick, unit) {
+  const X = s => x0 + s / tmax * (x1 - x0);
+  for (let s = 0; s <= tmax + EPS; s += tick) {
+    line(X(s), y - 4, X(s), y, { color: AXIS });
+    text(X(s), y + 12, `${+s.toFixed(3)} ${unit}`, { fs: 11, color: MUTED, ha: "center" });
+  }
+  return X;
+}
+
+// ---------------------------------------------------------------- 1. memory
+function gauge(x, y, h, gb, limit, maxGb, label) {
+  const Y = v => y + h - v / maxGb * h, w = 46;
+  rect(x, y, w, h, { fill: "#ffffff", stroke: AXIS });
+  const ram = Math.min(gb, limit);
+  rect(x, Y(ram), w, Y(0) - Y(ram), { fill: JOB.A, stroke: JOB_EDGE.A });
+  if (gb > limit) {
+    rect(x, Y(gb), w, Y(limit) - Y(gb), { fill: CARD, stroke: MUTED });
+    hatch(x, Y(gb), w, Y(limit) - Y(gb));
+    text(x + w + 10, Math.min((Y(gb) + Y(limit)) / 2, Y(limit) - 14), `swap, on disk: ${(gb - limit).toFixed(1)} GB`, { fs: 12, color: INK_2 });
+  }
+  for (let v = 0; v <= maxGb; v += 2) {
+    line(x - 4, Y(v), x, Y(v), { color: AXIS });
+    text(x - 8, Y(v), `${v} GB`, { fs: 10.5, ha: "right", color: MUTED });
+  }
+  line(x - 6, Y(limit), x + w + 6, Y(limit), { color: ORANGE, lw: 1.5, dashed: true });
+  text(x + w + 10, Y(limit) + 13, `job's memory, ${limit} GB`, { fs: 12, color: ORANGE });
+  if (gb > 0.01) text(x + w / 2, Y(gb) - 12, `${gb.toFixed(1)} GB`, { fs: 12, ha: "center", bold: true });
+  text(x + w / 2, y + h + 16, label, { fs: 12, ha: "center", color: INK_2 });
+}
+
+function tiles(x, y, state) {                // state(i) -> {fill, edge, frac}
+  const s = 21, gap = 3;
+  for (let i = 0; i < 100; i++) {
+    const tx = x + (i % 10) * (s + gap), ty = y + Math.floor(i / 10) * (s + gap), st = state(i);
+    rect(tx, ty, s, s, { fill: "#ffffff", stroke: GRID });
+    if (st) {
+      rect(tx, ty, s * st.frac, s, { fill: st.fill, stroke: st.edge, lw: 0.75 });
+    }
+  }
+}
+
+function drawMemory(v, t) {
+  const { now } = stepAt(v, t), P = v.pandas, D = v.dask;
+  header(v, `${now.toFixed(2)} s`);
+  // pandas: files read, memory
+  const pf = now <= P.tLimit ? now / P.fast : Math.min(100, P.limitFiles + (now - P.tLimit) / P.slow);
+  const pmem = pf * P.gbFile;
+  text(80, 140, "pandas: one process reads every file into one table", { fs: 15, bold: true });
+  tiles(80, 165, i => i < Math.floor(pf) ? { fill: JOB.A, edge: JOB_EDGE.A, frac: 1 }
+    : i === Math.floor(pf) && pf < 100 ? { fill: JOB.A, edge: JOB_EDGE.A, frac: pf - i } : null);
+  text(80, 420, `${Math.floor(pf)} of 100 files read` + (now >= P.readEnd ? ", grouped" : ""), { fs: 13, color: INK_2 });
+  gauge(380, 165, 230, pmem, v.limit, 12, "memory");
+  // Dask: 4 threads, one file each, then the next
+  const round = now / D.perFile, r = Math.floor(round + EPS), frac = round - r;
+  const done = Math.min(100, r * 4), finished = now >= D.total - EPS;
+  text(690, 140, "Dask: 4 threads, one partition (file) each", { fs: 15, bold: true });
+  tiles(690, 165, i => i < done || finished ? { fill: DONE, edge: AXIS, frac: 1 }
+    : i < done + 4 && now > EPS ? { fill: JOB[WK[i % 4]], edge: JOB_EDGE[WK[i % 4]], frac: Math.max(frac, 0.04) } : null);
+  text(690, 420, finished ? "100 of 100 files done" : `${done} of 100 files done, ${now > EPS ? 4 : 0} being read`, { fs: 13, color: INK_2 });
+  WK.forEach((key, i) => {
+    rect(690 + i * 82, 440, 12, 12, { fill: JOB[key], stroke: JOB_EDGE[key] });
+    text(706 + i * 82, 446, `thread ${i + 1}`, { fs: 10.5, color: INK_2 });
+  });
+  const dmem = now <= EPS ? 0 : Math.min(D.peak, D.peak * Math.min(1, round * 1.5));
+  gauge(990, 165, 230, dmem, v.limit, 12, "memory");
+  // time bars
+  const X = x => 210 + x / v.tmax * 970, y0 = 520;
+  [["pandas", P.total], ["Dask", D.total]].forEach(([name, total], i) => {
+    const y = y0 + i * 40, e = Math.min(now, total);
+    text(196, y + 13, name, { fs: 13, ha: "right", color: INK_2 });
+    line(X(0), y + 26, X(v.tmax), y + 26, { color: GRID });
+    if (e > EPS) rect(X(0), y, X(e) - X(0), 26, { fill: CARD, stroke: MUTED });
+    if (now >= total - EPS) text(X(total) + 8, y + 13, `${total} s`, { fs: 13, bold: true });
+  });
+  axis(X(0), X(v.tmax), y0 + 80, v.tmax, 2, "s");
+  if (now > EPS) line(X(Math.min(now, v.tmax)), y0 - 8, X(Math.min(now, v.tmax)), y0 + 76, { color: ORANGE, lw: 1.5 });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 2. task graph
+function drawGraph(v, t) {
+  const { now } = stepAt(v, t), T = v.tasks;
+  header(v, `${now.toFixed(0)} ms`);
+  const byName = Object.fromEntries(T.map(n => [n.name, n]));
+  const users = Object.fromEntries(T.map(n => [n.name, T.filter(m => m.inputs.includes(n.name))]));
+  const cx = n => 150 + n.col * 140, cy = n => 140 + n.row * 56, bw = 112, bh = 32;
+  for (const n of T) for (const i of n.inputs) {
+    const m = byName[i];
+    line(cx(m), cy(m) + bh, cx(n), cy(n), { color: AXIS, lw: 1 });
+  }
+  let held = 0;
+  for (const n of T) {
+    const done = n.b <= now + EPS, running = n.a <= now + EPS && !done;
+    const ready = !done && !running && n.inputs.every(i => byName[i].b <= now + EPS);
+    const freed = done && users[n.name].length > 0 && users[n.name].every(u => u.b <= now + EPS);
+    const x = cx(n) - bw / 2, y = cy(n), key = WK[n.w];
+    let color = INK;
+    if (done && !freed) { rect(x, y, bw, bh, { fill: JOB[key], stroke: JOB_EDGE[key], rx: 6 }); held++; }
+    else if (freed) { rect(x, y, bw, bh, { fill: CARD, stroke: GRID, rx: 6 }); color = MUTED; }
+    else if (running) {
+      rect(x, y, bw, bh, { fill: "#ffffff", stroke: JOB_EDGE[key], lw: 2, rx: 6 });
+      rect(x + 1, y + 1, (bw - 2) * (now - n.a) / (n.b - n.a), bh - 2, { fill: JOB[key] });
+    } else if (ready) rect(x, y, bw, bh, { fill: "#ffffff", stroke: INK, lw: 1.5, rx: 6 });
+    else { rect(x, y, bw, bh, { fill: "#ffffff", stroke: GRID, rx: 6 }); color = MUTED; }
+    text(cx(n), y + bh / 2, n.name, { fs: 12, ha: "center", color });
+  }
+  // legend
+  const ly = 432;
+  [["ready: its inputs are done", "#ffffff", INK, 1.5], ["running", "#ffffff", JOB_EDGE.A, 2],
+   ["result in memory", JOB.A, JOB_EDGE.A, 1], ["freed: nobody needs it", CARD, GRID, 1]]
+    .forEach(([label, fill, stroke, lw], i) => {
+      rect(60 + i * 220, ly - 7, 22, 14, { fill, stroke, lw, rx: 3 });
+      text(90 + i * 220, ly, label, { fs: 12, color: INK_2 });
+    });
+  text(W - 60, ly, `results in memory: ${held}`, { fs: 13, ha: "right", bold: true });
+  // workers' lanes
+  const X = s => 210 + s / v.tmax * 970, y0 = 470, rowH = 26, gap = 8;
+  for (let w = 0; w < 4; w++) {
+    const y = y0 + w * (rowH + gap);
+    text(196, y + rowH / 2, `worker ${w + 1}`, { fs: 12, ha: "right", color: INK_2 });
+    line(X(0), y + rowH, X(v.tmax), y + rowH, { color: GRID });
+  }
+  for (const n of T) {
+    if (n.a >= now - EPS) continue;
+    const y = y0 + n.w * (rowH + gap), e = Math.min(n.b, now), key = WK[n.w];
+    rect(X(n.a), y, X(e) - X(n.a), rowH, { fill: JOB[key], stroke: JOB_EDGE[key] });
+    if (e >= n.b - EPS && X(n.b) - X(n.a) > 40) text((X(n.a) + X(n.b)) / 2, y + rowH / 2, n.name, { fs: 10.5, ha: "center" });
+  }
+  const yb = y0 + 4 * (rowH + gap);
+  axis(X(0), X(v.tmax), yb, v.tmax, 10, "ms");
+  if (now > EPS) line(X(Math.min(now, v.tmax)), y0 - 8, X(Math.min(now, v.tmax)), yb, { color: ORANGE, lw: 1.5 });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 3. groupby
+function drawGroupby(v, t) {
+  const { k, g } = stepAt(v, t);
+  header(v, "");
+  const P = v.parts, O = v.outs, pw = 118, px = i => 100 + i * 140;
+  const grp = ["zones 1-2", "zones 3-4", "zones 5-6"];
+  const fade = step => k > step ? 1 : k === step ? g : 0;      // elements of step s appear while it plays
+  // partitions
+  for (let i = 0; i < P; i++) {
+    box(px(i), 128, pw, 46, "#ffffff", AXIS, 1, true);
+    text(px(i) + pw / 2, 143, `partition ${i + 1}`, { fs: 12.5, ha: "center", bold: true });
+    text(px(i) + pw / 2, 162, "trips, every zone", { fs: 11, ha: "center", color: INK_2 });
+  }
+  // map: one small table per partition, cut in 3 pieces by zone
+  const mapY = 205, ch = 17;
+  if (k >= 1) {
+    const a = fade(1);
+    text(24, mapY + 26, "map", { fs: 13, color: INK_2, alpha: a });
+    for (let i = 0; i < P; i++) {
+      line(px(i) + pw / 2, 174, px(i) + pw / 2, mapY, { color: AXIS, alpha: a });
+      for (let j = 0; j < O; j++) {
+        rect(px(i), mapY + j * ch, pw, ch, { fill: CARD, stroke: AXIS, alpha: a });
+        text(px(i) + pw / 2, mapY + j * ch + ch / 2, `${grp[j]}: sums`, { fs: 10.5, ha: "center", color: INK_2, alpha: a });
+      }
+    }
+  }
+  const outX = j => 240 + j * 360, ow = 200, outY = 380;
+  if (k >= 2 && k <= 3) {                                     // shuffle
+    const a = fade(2);
+    text(24, 320, "shuffle", { fs: 13, color: INK_2, alpha: a });
+    for (let i = 0; i < P; i++) for (let j = 0; j < O; j++) {
+      const x1 = px(i) + pw / 2, y1 = mapY + O * ch, x2 = outX(j) + ow / 2, y2 = outY;
+      line(x1, y1, x2, y2, { color: AXIS, lw: 0.8, alpha: a });
+      if (k === 2 && g < 1) {                                 // the pieces travel
+        const xs = x1 + (x2 - x1) * g, ys = y1 + (y2 - y1) * g;
+        rect(xs - 6, ys - 4, 12, 8, { fill: CARD, stroke: MUTED });
+      }
+    }
+    for (let j = 0; j < O; j++) {
+      box(outX(j), outY, ow, 40, "#ffffff", AXIS, 1, true);
+      text(outX(j) + ow / 2, outY + 20, `${grp[j]}: 8 pieces`, { fs: 12.5, ha: "center", alpha: a });
+    }
+  }
+  if (k === 3) {                                              // reduce
+    const a = fade(3);
+    text(24, 470, "reduce", { fs: 13, color: INK_2, alpha: a });
+    for (let j = 0; j < O; j++) {
+      line(outX(j) + ow / 2, outY + 40, outX(j) + ow / 2, 455, { color: AXIS, alpha: a });
+      rect(outX(j), 455, ow, 34, { fill: JOB.A, stroke: JOB_EDGE.A, rx: 6, alpha: a });
+      text(outX(j) + ow / 2, 472, `mean fare, ${grp[j]}`, { fs: 12.5, ha: "center", alpha: a });
+    }
+    text(640, 530, "3 tasks of the reduce, each with the sums and counts of its own zones", { fs: 13, ha: "center", color: INK_2, alpha: a });
+  }
+  if (k >= 4) {                                               // the tree
+    const a = fade(4), l1 = [px(1) + pw / 2 + 72, px(5) + pw / 2 + 72], y1 = 320, y2 = 410;
+    text(24, 300, "tree", { fs: 13, color: INK_2, alpha: a });
+    for (let i = 0; i < P; i++) line(px(i) + pw / 2, mapY + O * ch, l1[Math.floor(i / 4)], y1, { color: AXIS, lw: 0.8, alpha: a });
+    l1.forEach((x, h) => {
+      line(x, y1 + 34, 640, y2, { color: AXIS, alpha: a });
+      rect(x - 110, y1, 220, 34, { fill: CARD, stroke: AXIS, rx: 6, alpha: a });
+      text(x, y1 + 17, `add tables ${4 * h + 1}-${4 * h + 4}`, { fs: 12, ha: "center", alpha: a });
+    });
+    rect(530, y2, 220, 34, { fill: CARD, stroke: AXIS, rx: 6, alpha: a });
+    text(640, y2 + 17, "add the two", { fs: 12, ha: "center", alpha: a });
+    line(640, y2 + 34, 640, 470, { color: AXIS, alpha: a });
+    rect(500, 470, 280, 34, { fill: JOB.A, stroke: JOB_EDGE.A, rx: 6, alpha: a });
+    text(640, 487, "mean fare of every zone", { fs: 12.5, ha: "center", alpha: a });
+  }
+  if (k >= 5) {
+    const a = fade(5), rows = [["", "shuffle", "tree"], ["4 threads", "1.04 s", "1.03 s"], ["4 processes", "2.22 s", "1.97 s"]];
+    text(640, 548, "measured: 100 partitions, 263 zones, a job with 4 CPUs", { fs: 13, ha: "center", color: INK_2, alpha: a });
+    rows.forEach((r, i) => r.forEach((c, j) => text(470 + j * 150, 580 + i * 26, c, { fs: 13, ha: "center", bold: i === 0 || j === 0, alpha: a })));
+  }
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+// ---------------------------------------------------------------- 4. chunk size
+function drawChunks(v, t) {
+  const { now } = stepAt(v, t);
+  header(v, `${now.toFixed(0)} ms`);
+  const X = s => 210 + s / v.tmax * 970, rowH = 17, gap = 5;
+  v.panels.forEach((p, i) => {
+    const y0 = 128 + i * 172;
+    const what = p.n === 1 ? "1 chunk of 100 million numbers" : `${p.n.toLocaleString("en-US")} chunks of ${(1e8 / p.n).toLocaleString("en-US")} numbers`;
+    text(60, y0, `${what}: ${p.work < 1 ? p.work.toFixed(2) : +p.work.toFixed(1)} ms of work per task`, { fs: 14, bold: true });
+    const lanes = ["scheduler", "CPU 1", "CPU 2", "CPU 3", "CPU 4"];
+    lanes.forEach((name, l) => {
+      const y = y0 + 16 + l * (rowH + gap);
+      text(196, y + rowH / 2, name, { fs: 11.5, ha: "right", color: INK_2 });
+      line(X(0), y + rowH, X(v.tmax), y + rowH, { color: GRID });
+    });
+    for (const [a, b] of p.sched) {
+      if (a >= now - EPS) continue;
+      const y = y0 + 16, e = Math.min(b, now);
+      rect(X(a), y, Math.max(X(e) - X(a), 0.6), rowH, { fill: DONE, stroke: X(e) - X(a) > 3 ? MUTED : "none", lw: 0.5 });
+    }
+    for (const [c, a, b] of p.segs) {
+      if (a >= now - EPS) continue;
+      const y = y0 + 16 + (c + 1) * (rowH + gap), e = Math.min(b, now), key = WK[c];
+      rect(X(a), y, Math.max(X(e) - X(a), 0.6), rowH, { fill: JOB[key], stroke: X(e) - X(a) > 3 ? JOB_EDGE[key] : "none", lw: 0.5 });
+    }
+    const yb = y0 + 16 + 5 * (rowH + gap);
+    if (now >= p.end - EPS) text(W - 60, y0, `done: ${(p.end / 1000).toFixed(2)} s in the model, ${p.measured} s measured`, { fs: 14, bold: true, ha: "right" });
+    axis(X(0), X(v.tmax), yb, v.tmax, 50, "ms");
+    if (now > EPS) line(X(Math.min(now, v.tmax)), y0 + 10, X(Math.min(now, v.tmax)), yb, { color: ORANGE, lw: 1.5 });
+  });
+  rect(0, 0, W, 720, { cls: "seek" });
+}
+
+const DRAW = { memory: drawMemory, graph: drawGraph, groupby: drawGroupby, chunks: drawChunks };
+const VIEWS = DATA.order.map(id => ({
+  id, label: DATA.views[id].label, tmax: DATA.views[id].steps.length - 0.001, snap: 0.001, unit: "steps",
+  speeds: [0.2, 0.3, 0.4, 0.6, 0.8, 1], speed: 2, video: "", draw: t => DRAW[id](DATA.views[id], t),
+  seek: x => Math.min(Math.max(Math.round((x - 60) / (W - 120) * (DATA.views[id].steps.length - 1)), 0), DATA.views[id].steps.length - 1),
+}));
+
+// ---- steps ----
+const stepsOf = v => DATA.views[v.id].steps;
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.speed]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${DATA.key}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.speeds.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = stepsOf(view), k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = stepsOf(view);
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.speeds.length - 1);
+  $("speedHint").textContent = view.video;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  if (VIEWS.length > 1) try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = stepsOf(view), t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = `${view.speeds[k]} ${view.unit}/s`;
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.speeds[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${DATA.key}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onSpeed = document.activeElement === $("speed");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onSpeed) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onSpeed) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
