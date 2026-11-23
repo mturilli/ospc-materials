@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Choosing a Time Slice, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (scheduling-policies.html, mlfq.html, linux-schedulers.html):
+   views, the 1280x720 stage (light in both themes), the current step, the controls, then every step and a
+   note on the model. Written by hand for the final review (sample 1); no generator. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 330px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.caption .row { display: grid; grid-template-columns: 84px 72px minmax(0, 1fr); gap: 10px; font-size: 16px; color: var(--muted); }
+.caption .row.on { color: var(--ink); }
+.caption .row b { color: var(--ink); }
+.caption .row .lt { font-family: var(--mono); font-size: 14px; padding-top: 2px; }
+.caption .row.on .lt { color: var(--accent-text); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 18ch; font-variant-numeric: tabular-nums; }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.logrow .lx b { color: var(--ink); }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .caption .row { grid-template-columns: 76px minmax(0, 1fr); }
+  .caption .row .lt { display: none; }
+  .speed input { width: 120px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Choosing a Time Slice, Step by Step</h1>
+      <p>Five processes share one core in round robin, and each switch costs 0.1ms. Which slice keeps both the switching and the wait small?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Position">
+    </div>
+    <p class="keys" id="keys"></p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the model</h2>
+    <p>One core runs five processes, P1 to P5, in round robin. All of them are ready and none of them waits for I/O or finishes, so each one runs for a whole slice and then goes to the back of the queue. Each context switch costs 0.1ms: the OS saves the registers of one process, loads those of the next, and runs the scheduler (Lecture 11).</p>
+    <p><b>Switching.</b> Every slice of work is followed by one switch, so the share of the core spent switching is switch / (slice + switch). With 0.1ms slices: 0.1 / 0.2 = 50%. With 10ms: 0.1 / 10.1, about 1%. With 1s: 0.1 / 1000.1, about 0.01%.</p>
+    <p><b>P1's wait.</b> After its slice, P1 waits while P2 to P5 run theirs, with a switch before each of them and one more back to P1: 4 slices and 5 switches. With 0.1ms slices: 0.9ms. With 10ms: 40.5ms. With 1s: about 4s.</p>
+    <p><b>One round.</b> Each row is one round, from P1's start until P1 runs again: 1ms, 50.5ms and about 5s. The rows have their own time scales, so that each round fills the width. In the 10ms and 1s rows a switch is too short to see at that scale; it is drawn as a thin line, so you can see where it is.</p>
+    <p><b>Lecture 11</b> used 1ms per switch. Only the ratio of the slice to the switch matters for the share: 10ms slices with 0.1ms switches lose the same 1% as 100ms slices with 1ms switches. A real switch also leaves the next process with cold caches, so it costs more than the switch itself; the question gives 0.1ms, and so does this page.</p>
+  </section>
+</div>
+
+<script>
+// ---- drawing constants, as on the other step-by-step pages ----
+const W = 1280, K = 100 / 72;  // font sizes are in points at 100 dpi, like the videos'
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const GREEN = "#0a8a0a", RED = "#c4372b";
+const PFILL = ["#cde2fb", "#c9eedd", "#e6dcf5", "#f6eec4", "#e6e4dc"];   // P1 to P5
+const PEDGE = ["#2a78d6", "#1baf7a", "#8b6fc7", "#c9a227", "#6e6c66"];
+const BLUE = PEDGE[0];
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+const KEY = "time-slice";
+
+// ---- SVG helpers (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `>${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.alpha != null ? ` opacity="${o.alpha}"` : "")
+    + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(2.4 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+function polyline(pts, o = {}) {
+  out.push(`<polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}" fill="none"`
+    + ` stroke="${o.color || INK}" stroke-width="${((o.lw || 1) * K).toFixed(2)}" stroke-linejoin="round"/>`);
+}
+function dot(x, y, r, fill) { out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${fill}" stroke="#ffffff" stroke-width="2"/>`); }
+
+// ---- numbers: 0.1ms, 10ms, 1s; no space before the unit, no trailing zeros ----
+const strip = s => s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+function ms(v) {                       // a duration, given in ms
+  if (v < 1) return strip(v.toFixed(2)) + "ms";
+  if (v < 1000) return strip(v.toFixed(1)) + "ms";
+  return strip((v / 1000).toFixed(2)) + "s";
+}
+function clock(v) {                    // a row's own clock: enough digits to see a 0.1ms switch after 1s
+  if (v < 1) return strip(v.toFixed(2)) + "ms";
+  if (v < 1000) return strip(v.toFixed(1)) + "ms";
+  return strip((v / 1000).toFixed(4)) + "s";
+}
+function pct(f) {                      // a share, given as a fraction
+  const p = f * 100;
+  if (p <= 0) return "0%";
+  if (p >= 10) return Math.round(p) + "%";
+  if (p >= 1) return strip(p.toFixed(1)) + "%";
+  return String(Number(p.toPrecision(1))) + "%";
+}
+
+// ---- the model: 5 processes, one core, round robin, 0.1ms per switch ----
+const SW = 0.1, NP = 5;
+const OPTS = [{ key: "A", s: 0.1 }, { key: "B", s: 10 }, { key: "C", s: 1000 }];
+const share = s => SW / (s + SW);            // of the core, over whole rounds
+const wait = s => 4 * s + 5 * SW;            // P1's wait for its next turn
+const roundLen = s => NP * (s + SW);         // P1 starts again after one round
+function segs(s) {                           // one round: [kind, process, from, to] in ms
+  const r = [];
+  for (let j = 0; j < NP; j++) {
+    const a = j * (s + SW);
+    r.push(["run", j, a, a + s], ["sw", j, a + s, a + s + SW]);
+  }
+  return r;
+}
+function stateAt(s, tau) {                   // who has the core at time tau, and what was spent so far
+  const j = Math.floor((tau + EPS * s) / (s + SW)), within = tau - j * (s + SW);
+  if (j >= NP) return { run: 0, again: true, switched: NP * SW, waited: wait(s) };
+  const switched = j * SW + Math.max(0, within - s);
+  const run = within < s - EPS * s ? j : null;
+  return { run, from: j, switched, waited: tau > s ? tau - s : null };
+}
+
+// ---- view 1: one round of each slice, side by side ----
+const X0 = 260, X1 = 920, BW = X1 - X0, BH = 60;
+const ROWY = [180, 340, 500];
+const RX1 = 958, RX2 = 1100;               // readout columns
+const TICKS = [[0.2, 1, "ms"], [10, 1, "ms"], [1000, 1000, "s"]];   // tick every, unit size, unit
+
+function drawBar(s, y, upto, sc) {
+  rect(X0, y, BW, BH, { fill: "#ffffff", stroke: GRID });
+  for (const [kind, j, a, b] of segs(s)) {
+    if (a >= upto - EPS * s) continue;
+    const e = Math.min(b, upto), w = (e - a) * sc;
+    if (kind === "run") {
+      rect(X0 + a * sc, y, w, BH, { fill: PFILL[j], stroke: "#ffffff", lw: 0.6 });
+      if (w > 30) text(X0 + (a + e) / 2 * sc, y + BH / 2, `P${j + 1}`, { fs: 15, ha: "center" });
+    } else {
+      rect(X0 + a * sc, y, Math.max(w, 1.6), BH, { fill: ORANGE });
+      if (w > 58) text(X0 + (a + e) / 2 * sc, y + BH / 2, "switch", { fs: 12, ha: "center", color: "#ffffff", bold: true });
+    }
+  }
+}
+
+function drawRound(u) {
+  const end = u >= 1 - EPS;
+  text(60, 52, "Three slices, one round each", { fs: 30 });
+  text(60, 95, "Each row is one round, from P1's start until P1 runs again, on its own time scale.", { fs: 17, color: INK_2 });
+  text(RX1, ROWY[0] - 58, "switching", { fs: 15, color: ORANGE, bold: true });
+  text(RX1, ROWY[0] - 38, "share of the core", { fs: 12, color: MUTED });
+  text(RX2, ROWY[0] - 58, "P1 waits", { fs: 15, color: BLUE, bold: true });
+  text(RX2, ROWY[0] - 38, "for its next turn", { fs: 12, color: MUTED });
+  OPTS.forEach((o, i) => {
+    const y = ROWY[i], s = o.s, R = roundLen(s), sc = BW / R, tau = u * R, st = stateAt(s, tau);
+    if (end && i === 1) rect(40, y - 44, 1215, BH + 96, { stroke: GREEN, lw: 1.6, rx: 12 });
+    text(60, y + BH / 2 - 14, o.key, { fs: 26, bold: true });
+    text(100, y + BH / 2 - 14, `${ms(s)} slice`, { fs: 18 });
+    text(100, y + BH / 2 + 16, `t = ${clock(tau)}`, { fs: 15, mono: true, color: INK_2 });
+    drawBar(s, y, tau, sc);
+    // the row's own time axis
+    const [every, unit, uname] = TICKS[i];
+    for (let k = 0; k * every <= R + EPS; k++) {
+      const xx = X0 + k * every * sc;
+      line(xx, y + BH, xx, y + BH + 5, { color: AXIS });
+      const last = (k + 1) * every > R + EPS;
+      text(xx, y + BH + 36, strip(String(Number((k * every / unit).toFixed(3)))) + (last ? uname : ""), { fs: 12, color: MUTED, ha: "center" });
+    }
+    // P1's wait, under the bar
+    if (st.waited != null) {
+      const xa = X0 + s * sc, xb = X0 + Math.min(tau, R) * sc;
+      line(xa, y + BH + 16, xb, y + BH + 16, { color: BLUE, lw: 2.4 });
+      line(xa, y + BH + 10, xa, y + BH + 22, { color: BLUE, lw: 1.4 });
+      if (end) line(xb, y + BH + 10, xb, y + BH + 22, { color: BLUE, lw: 1.4 });
+    }
+    // who has the core now
+    if (!end) {
+      const lab = st.run != null ? `P${st.run + 1} runs` : `switch to P${(st.from + 1) % NP + 1}`;
+      const xl = Math.min(Math.max(X0 + tau * sc + 6, X0), X1 - 130);
+      text(xl, y - 14, lab, { fs: 13, color: st.run != null ? INK_2 : ORANGE, bold: st.run == null });
+    } else {
+      text(X1, y - 14, "P1 runs again", { fs: 13, color: BLUE, bold: true, ha: "right" });
+    }
+    // live readouts
+    const sw = tau > 0 ? st.switched / tau : 0;
+    const good = [[false, true], [true, true], [true, false]][i];   // [switching small, wait small]
+    text(RX1, y + BH / 2 - 6, pct(sw), { fs: 26, bold: true, color: end ? (good[0] ? GREEN : RED) : INK });
+    if (st.waited == null) text(RX2, y + BH / 2 - 6, "P1 runs", { fs: 17, color: MUTED });
+    else text(RX2, y + BH / 2 - 6, ms(st.waited), { fs: 26, bold: true, color: end ? (good[1] ? GREEN : RED) : INK });
+    if (end) {
+      const verdict = ["half the core goes into switching", "both small", "P1 waits 4s while the others run"][i];
+      text(RX1, y + BH / 2 + 26, verdict, { fs: 13, color: [RED, GREEN, RED][i], bold: true });
+    }
+  });
+  // the same fraction of a round in every row
+  const xc = X0 + u * BW;
+  line(xc, ROWY[0] - 26, xc, ROWY[2] + BH + 24, { color: INK, lw: 1.2 });
+  rect(X0, ROWY[0] - 26, BW, ROWY[2] + BH + 50 - ROWY[0], { cls: "seek" });
+  legend(668);
+}
+
+function legend(y) {
+  let x = 60;
+  for (let j = 0; j < NP; j++) {
+    rect(x, y - 12, 24, 24, { fill: PFILL[j] });
+    text(x + 12, y, `P${j + 1}`, { fs: 10, ha: "center" });
+    x += 30;
+  }
+  text(x + 4, y, "run a slice", { fs: 14, color: INK_2 });
+  x += 130;
+  rect(x, y - 12, 24, 24, { fill: ORANGE });
+  text(x + 34, y, "switch, 0.1ms", { fs: 14, color: INK_2 });
+  x += 190;
+  line(x, y, x + 28, y, { color: BLUE, lw: 2.4 });
+  text(x + 38, y, "P1 waiting", { fs: 14, color: INK_2 });
+}
+
+function roundSteps() {
+  const steps = [];
+  for (let k = 0; k <= 2 * NP; k++) {
+    const u = k / (2 * NP), j = Math.floor(k / 2);
+    const rows = OPTS.map((o, i) => {
+      const s = o.s, tau = u * roundLen(s), name = `${o.key}, ${ms(s)}`;
+      let txt, on = true;
+      if (k === 0) txt = `P1 runs first, for one slice of ${ms(s)}.`;
+      else if (k === 2 * NP) txt = [
+        "P1 runs again after waiting only 0.9ms, but half the core went into switching.",
+        "P1 runs again after waiting 40.5ms, and switching took about 1% of the core. Both are small.",
+        "Switching took only 0.01% of the core, but P1 runs again only after waiting about 4s."][i];
+      else if (k % 2 === 1) {
+        if (i === 0) txt = `P${j + 1}'s slice is over. The core switches to P${(j + 1) % NP + 1}, which takes 0.1ms, as long as the slice itself.`;
+        else { txt = `P${j + 1} is still running, halfway through its slice.`; on = false; }
+      } else {
+        const w = ms(tau - s);
+        txt = i === 0 ? `The switch is over and P${j + 1} runs. Half the time so far went into switching. P1 has waited ${w}.`
+          : `After a switch of 0.1ms, too short to see here, P${j + 1} runs. Switching so far: ${pct(share(s))}. P1 has waited ${w}.`;
+      }
+      return [name, clock(tau), txt, on];
+    });
+    const label = k === 0 ? "P1 runs" : k === 2 * NP ? "P1 again" : k % 2 ? "switch" : `P${j + 1} runs`;
+    steps.push({ t: u, label, rows });
+  }
+  return steps;
+}
+
+// ---- view 2: any slice from 0.1ms to 1s ----
+const PX0 = 260, PX1 = 1200;
+const P1Y = [300, 440], P2Y = [500, 640];          // top and bottom of the two charts
+const sliceAt = t => SW * Math.pow(10, t);          // t = 0..4: 0.1ms .. 1s
+const xOf = t => PX0 + t / 4 * (PX1 - PX0);
+const WMAX = 4.2;                                   // s, top of the wait chart
+
+function drawSweep(t) {
+  const s = sliceAt(t), R = roundLen(s);
+  text(60, 52, "Any slice from 0.1ms to 1s", { fs: 30 });
+  text(60, 95, "Same five processes, 0.1ms per switch. Move the slider under the picture to change the slice.", { fs: 17, color: INK_2 });
+  // one round with this slice
+  const y = 168;
+  text(60, y + BH / 2 - 14, "Slice", { fs: 15, color: MUTED });
+  text(60, y + BH / 2 + 14, ms(s), { fs: 26, bold: true });
+  drawBar(s, y, R, BW / R);
+  text(X1, y + BH + 16, `one round: ${ms(R)}`, { fs: 12, color: MUTED, ha: "right" });
+  text(RX1, y - 26, "switching", { fs: 15, color: ORANGE, bold: true });
+  text(RX2, y - 26, "P1 waits", { fs: 15, color: BLUE, bold: true });
+  text(RX1, y + BH / 2, pct(share(s)), { fs: 26, bold: true });
+  text(RX2, y + BH / 2, ms(wait(s)), { fs: 26, bold: true });
+  // the two charts, slice on a log scale
+  const n = 200, ptsS = [], ptsW = [];
+  const yS = f => P1Y[1] - f * 100 / 50 * (P1Y[1] - P1Y[0]);
+  const yW = v => P2Y[1] - v / 1000 / WMAX * (P2Y[1] - P2Y[0]);
+  for (const [top, bot, ticks, lab1, lab2, col] of [
+    [P1Y[0], P1Y[1], [0, 10, 20, 30, 40, 50], "Switching", "(% of the core)", ORANGE],
+    [P2Y[0], P2Y[1], [0, 1, 2, 3, 4], "P1's wait for", "its next turn (s)", BLUE]]) {
+    text(60, (top + bot) / 2 - 12, lab1, { fs: 15, bold: true, color: col });
+    text(60, (top + bot) / 2 + 12, lab2, { fs: 13, color: MUTED });
+    const max = ticks[ticks.length - 1] * (col === BLUE ? WMAX / 4 : 1);
+    for (const v of ticks) {
+      const yy = bot - v / max * (bot - top);
+      line(PX0, yy, PX1, yy, { color: GRID });
+      text(PX0 - 10, yy, String(v), { fs: 12, color: MUTED, ha: "right" });
+    }
+    for (let d = 0; d <= 4; d++) line(xOf(d), top, xOf(d), bot, { color: GRID });
+  }
+  for (let k = 0; k <= n; k++) {
+    const tt = 4 * k / n, sl = sliceAt(tt);
+    ptsS.push([xOf(tt), yS(share(sl))]);
+    ptsW.push([xOf(tt), yW(wait(sl))]);
+  }
+  ["0.1ms", "1ms", "10ms", "100ms", "1s"].forEach((lab, d) =>
+    text(xOf(d), P2Y[1] + 20, lab, { fs: 13, color: MUTED, ha: "center" }));
+  text(PX1, P2Y[1] + 44, "slice (each mark is 10 times the one before)", { fs: 12, color: MUTED, ha: "right" });
+  // the three answers
+  [["A", 0], ["B", 2], ["C", 4]].forEach(([k, d]) => {
+    line(xOf(d), P1Y[0] - 10, xOf(d), P2Y[1], { color: AXIS, dashed: true });
+    text(xOf(d), P1Y[0] - 26, k, { fs: 18, bold: true, ha: "center", color: k === "B" ? GREEN : INK });
+  });
+  polyline(ptsS, { color: ORANGE, lw: 2.4 });
+  polyline(ptsW, { color: BLUE, lw: 2.4 });
+  // this slice
+  const xc = xOf(t);
+  line(xc, P1Y[0] - 6, xc, P2Y[1] + 4, { color: INK, lw: 1.2 });
+  const ys = yS(share(s)), yw = yW(wait(s)), right = t < 3;
+  dot(xc, ys, 6, ORANGE);
+  dot(xc, yw, 6, BLUE);
+  text(xc + (right ? 12 : -12), ys - 16, pct(share(s)), { fs: 15, bold: true, ha: right ? "left" : "right" });
+  text(xc + (right ? 12 : -12), yw - 16, ms(wait(s)), { fs: 15, bold: true, ha: right ? "left" : "right" });
+  rect(PX0, P1Y[0] - 10, PX1 - PX0, P2Y[1] + 30 - P1Y[0], { cls: "seek" });
+}
+
+const SWEEP_STEPS = [
+  { t: 0, label: "0.1ms", text: "A, 0.1ms: a switch takes as long as a slice, so every 0.1ms of work pays 0.1ms of switching: half the core goes into switching. P1 waits only 0.9ms." },
+  { t: 1, label: "1ms", text: "1ms: a switch is a tenth of a slice. Switching takes 9.1% of the core, and P1 waits 4.5ms." },
+  { t: 2, label: "10ms", text: "B, 10ms: switching takes about 1% of the core, and P1 waits about 40ms for its next turn. Both are small." },
+  { t: 3, label: "100ms", text: "100ms: switching drops to 0.1%, but P1 now waits about 0.4s." },
+  { t: 4, label: "1s", text: "C, 1s: switching drops to 0.01%, less than 1% saved compared with 10ms. In exchange, P1 waits about 4s, about 100 times longer, while the other four run." },
+];
+
+// ---- the views ----
+const VIEWS = [{
+  id: "round", label: "One round", tmax: 1, snap: 0.001, steps: roundSteps(),
+  durs: [60, 40, 30, 20, 15, 10, 6, 4], dur: 4, durText: d => `a round in ${d}s`,
+  aria: "Position in the round",
+  keys: "Click a timeline to jump to that moment.",
+  draw: drawRound, seek: x => Math.round((x - X0) / BW * 1000) / 1000,
+}, {
+  id: "sweep", label: "Any slice", tmax: 4, snap: 0.01, steps: SWEEP_STEPS,
+  durs: [60, 40, 30, 20, 15, 10, 6, 4], dur: 3, durText: d => `0.1ms to 1s in ${d}s`,
+  aria: "Length of the slice",
+  keys: "Drag the slider above, or click a chart, to pick any slice.",
+  draw: drawSweep, seek: x => Math.round((x - PX0) / (PX1 - PX0) * 4 * 100) / 100,
+}];
+
+// ---- steps ----
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+const stepText = s => s.rows ? s.rows.filter(r => r[3]).map(r => `${r[0]}: ${r[2]}`).join(" ") : s.text;
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.dur]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${KEY}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.durs.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  out = [];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+  const steps = view.steps, k = stepIndex(steps, t);
+  const key = view.id + ":" + k;
+  if (key !== shownStep) { shownStep = key; showStep(steps, k); }
+}
+
+function showStep(steps, k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  const cap = $("caption");
+  if (s.rows) {
+    cap.innerHTML = s.rows.map(([name, lt, txt, on]) =>
+      `<div class="row${on ? " on" : ""}"><b>${esc(name)}</b><span class="lt">${esc(lt)}</span><span>${esc(txt)}</span></div>`).join("");
+  } else {
+    cap.textContent = s.text;
+  }
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${stepText(s)}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  const steps = view.steps;
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("scrub").setAttribute("aria-label", view.aria);
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => {
+    const body = s.rows ? s.rows.filter(r => r[3]).map(r => `<b>${esc(r[0])}</b> ${esc(r[2])}`).join("<br>") : esc(s.text);
+    return `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+      + `<span class="lx">${body}</span></button></li>`;
+  }).join("");
+  $("log").scrollTop = 0;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.durs.length - 1);
+  $("keys").innerHTML = "Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play "
+    + "or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>2</kbd> to change view. " + view.keys;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function step(dir) {
+  stop();
+  const steps = view.steps, t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = view.durText(view.durs[k]);
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.tmax / view.durs[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${KEY}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  if (!e.target.classList.contains("seek")) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  stop(); setT(view.seek(p.x));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onRange = document.activeElement === $("speed") || document.activeElement === $("scrub");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onRange) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onRange) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
