@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; }</style>
+<title>Workers and Threads in a Parameter Sweep, Step by Step</title>
+<style>
+/* Shared shell of the step-by-step pages (time-slice.html, library-threads.html): views, the 1280x720 stage
+   (light in both themes), the current step, the controls, then every step and a note on the model.
+   Written by hand for the final review (sample 4); no generator. Adds a settings bar: workers, threads, options. */
+:root {
+  --bg: #f1f0eb;
+  --surface: #ffffff;
+  --stage: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6e6c66;
+  --line: #d9d7ce;
+  --accent: #eb6834;
+  --accent-text: #b4471c;
+  --accent-soft: #fbe3d8;
+  --on-accent: #0b0b0b;
+  --btn: #ffffff;
+  --btn-hover: #f6f5f1;
+  --primary: #0b0b0b;
+  --primary-text: #ffffff;
+  --font: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
+  --mono: Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --deck: min(100%, max(600px, calc((100vh - 380px) * 16 / 9)));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+    --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+    --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1c1c1a; --ink: #f1f0eb; --ink-2: #c8c6bf; --muted: #9b9991; --line: #363531;
+  --accent: #f07a4a; --accent-text: #f4936a; --accent-soft: #3b2319; --btn: #242422; --btn-hover: #2e2e2b;
+  --primary: #f1f0eb; --primary-text: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.page {
+  max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding-block: 14px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page > * { width: var(--deck); margin-inline: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+.top > div { min-width: 0; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
+.top p { margin: 3px 0 0; color: var(--ink-2); font-size: 14px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--btn); border: 1px solid var(--line); border-radius: 10px; }
+.tabs[hidden] { display: none; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--primary); color: var(--primary-text); }
+.stage { aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.stage .seek { cursor: pointer; }
+.settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.seg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.seg > span { font-weight: 700; margin-right: 4px; }
+.seg button { appearance: none; height: 36px; min-width: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
+.seg button:hover { background: var(--btn-hover); }
+.seg button[aria-pressed="true"] { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+.seg.opts button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); }
+.now { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 2px 16px; align-items: start; min-height: 3.3em; }
+.meta { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.meta .step { font-size: 13px; color: var(--muted); }
+.meta .time { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent-text); }
+.caption { font-size: clamp(16px, 1.5vw, 20px); line-height: 1.4; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.btn:hover { background: var(--btn-hover); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 0 20px; touch-action: none; -webkit-touch-callout: none; }
+.btn.primary.is-held { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.speed { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.speed label { font-weight: 700; }
+.speed input { width: 150px; accent-color: var(--accent); }
+.speed output { font-family: var(--mono); font-size: 14px; min-width: 18ch; font-variant-numeric: tabular-nums; }
+.scrub { position: relative; width: 100%; height: 34px; flex-basis: 100%; }
+.ticks { position: absolute; top: 0; left: 8px; right: 8px; height: 12px; pointer-events: none; }
+.ticks i { position: absolute; top: 2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .55; }
+.ticks i.on { background: var(--accent); opacity: 1; top: 0; height: 12px; }
+.scrub input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.keys { margin: 0; font-size: 13px; color: var(--muted); flex-basis: 100%; }
+kbd { font-family: var(--mono); font-size: 12px; color: var(--ink-2); background: var(--btn); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.log li + li { border-top: 1px solid var(--line); }
+.logrow { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.logrow:hover { background: var(--btn-hover); }
+.logrow.is-current { background: var(--accent-soft); color: var(--ink); }
+.logrow .lt { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.logrow.is-current .lt { color: var(--accent-text); font-weight: 700; }
+.logrow .lx { min-width: 0; }
+.notes p { margin: 0 0 8px; max-width: 78ch; color: var(--ink-2); }
+.notes b { color: var(--ink); }
+.notes a { color: var(--accent-text); }
+.notes code { font-family: var(--mono); font-size: 13px; }
+@media (max-width: 640px) {
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .meta { flex-direction: row; gap: 12px; align-items: baseline; }
+  .logrow { grid-template-columns: 76px minmax(0, 1fr); }
+  .speed input { width: 120px; }
+  .seg button { min-width: 36px; padding: 0 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Workers and Threads in a Parameter Sweep, Step by Step</h1>
+      <p>A batch job with 32 CPUs runs 64 independent fits, each multiplying small matrices with BLAS. Choose the workers and the BLAS threads per worker, and see what happens on the CPUs and to the sweep's time. An illustrative model.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="View" id="tabs"></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Animation"></svg>
+  </div>
+
+  <section class="settings" aria-label="Setting">
+    <div class="seg" role="group" aria-labelledby="wLab" id="wSeg"><span id="wLab">Workers</span></div>
+    <div class="seg" role="group" aria-labelledby="tLab" id="tSeg"><span id="tLab">BLAS threads per worker</span></div>
+    <div class="seg opts" role="group" aria-labelledby="oLab" id="oSeg"><span id="oLab">Options</span></div>
+  </section>
+
+  <section class="now" aria-live="polite">
+    <div class="meta"><span class="step" id="stepNo"></span><span class="time" id="stepTime"></span></div>
+    <div class="caption" id="caption"></div>
+  </section>
+
+  <section class="controls" aria-label="Playback">
+    <div class="buttons">
+      <button class="btn" id="reset" type="button" title="Back to the start (Home)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M14 3v10L5 8z" fill="currentColor"/></svg>Start</button>
+      <button class="btn" id="back" type="button" title="Previous step (left arrow)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v10L3 8z" fill="currentColor"/><rect x="12" y="3" width="2" height="10" fill="currentColor"/></svg>Step back</button>
+      <button class="btn primary" id="hold" type="button" title="Plays while you hold it down (or hold the space bar)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg>Hold to play</button>
+      <button class="btn" id="play" type="button" aria-pressed="false" title="Play or pause (P)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="playIcon"><path d="M4 2.5v11L13.5 8z" fill="currentColor"/></svg><span id="playLabel">Play</span></button>
+      <button class="btn" id="fwd" type="button" title="Next step (right arrow)">Step forward
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="2" height="10" fill="currentColor"/><path d="M5 3v10l8-5z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="speed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0" max="7" step="1" value="3">
+      <output id="speedOut" for="speed"></output>
+    </div>
+    <div class="scrub">
+      <div class="ticks" id="ticks"></div>
+      <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Position">
+    </div>
+    <p class="keys" id="keys"></p>
+  </section>
+
+  <section class="log" aria-labelledby="logTitle">
+    <h2 id="logTitle">All steps</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="notes">
+    <h2>About the model</h2>
+    <p><b>An illustrative model, not a measurement.</b> The job has 32 CPUs, and each CPU runs one thread at a time. The sweep is 64 independent fits. With 1 thread, a fit takes 1s: 2,000 products of small matrices, 0.5ms each. Every time on this page comes from this model.</p>
+    <p><b>Level 1, workers.</b> Each of the worker processes runs one fit at a time, so with W workers the 64 fits take 64 ÷ W rounds.</p>
+    <p><b>Level 2, BLAS threads.</b> Inside a fit, BLAS splits each product among the worker's threads. In the model, a quarter of each small product does not split: handing out the parts and waiting for the last one. So a fit gains at most 4 times, however many threads it gets (Amdahl's law, Lecture 16): 1.6 times with 2 threads, 2.3 with 4, 2.9 with 8, 3.4 with 16 and 3.7 with 32. Meanwhile, the other threads wait (hatched).</p>
+    <p><b>More threads than CPUs.</b> When workers × threads is more than 32, the threads take turns in time slices of 5ms. A thread that has finished its part keeps its CPU until its slice ends, so each part of each product costs a whole slice: the model of <a href="library-threads.html#small">Threads Inside the Libraries</a>, with the same 5ms slice. With T threads per worker, the sweep then takes 64 fits × 2,000 products × T parts × 5ms ÷ 32 CPUs = 20s × T.</p>
+    <p><b>Measured</b> (Lecture 17 and <a href="library-threads.html">Threads Inside the Libraries</a>). In a job with 4 CPUs, 16 tasks of small products: 4 workers × 1 thread took 1.41s; 4 workers × 4 threads took 6s with 500 × 500 products and 88.5s with 200 × 200. With 16 CPUs, 16 workers × 16 threads took 664s, against 1.6s with 1 thread each. The model's option C, 640s against 2s for A, is a collapse of the same order.</p>
+    <p><b>Why A.</b> The 64 fits are independent, so the sweep is already parallel at the level of the fits: 32 workers keep the 32 CPUs working, with nothing to wait for. BLAS threads would split small products that gain little, and more threads than CPUs make every product wait for turns. Parallelize one level and set the other to 1 (Lecture 17): here, 32 workers and <code>OPENBLAS_NUM_THREADS=1</code> in the job script. joblib with <code>n_jobs=32</code> does the same on its own: each worker gets 32 ÷ 32 = 1 thread. One large product is different: there the library's threads pay off (<a href="library-threads.html#one">Threads Inside the Libraries</a>, view One product).</p>
+  </section>
+</div>
+
+<script>
+// ---- drawing constants, as on the other step-by-step pages ----
+const W = 1280, K = 100 / 72;  // font sizes are in points at 100 dpi, like the videos'
+const INK = "#0b0b0b", INK_2 = "#52514e", MUTED = "#898781", AXIS = "#c3c2b7", GRID = "#e1e0d9", ORANGE = "#eb6834";
+const GREEN = "#0a8a0a", RED = "#c4372b";
+const WFILL = ["#cde2fb", "#fbd9c9", "#e6dcf5", "#f6eec4"];   // workers, in turn
+const WEDGE = ["#2a78d6", "#eb6834", "#8b6fc7", "#c9a227"];
+const WORK = ["#c9eedd", "#1baf7a"];                          // useful work, in the usage bar
+const SANS = "Arial, Helvetica, 'Liberation Sans', sans-serif";
+const MONO = "Menlo, 'SF Mono', Consolas, 'Liberation Mono', monospace";
+const EPS = 1e-6;
+const KEY = "parameter-sweep";
+
+// ---- SVG helpers (y grows downwards) ----
+let out = [];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function text(x, y, s, o = {}) {
+  const anchor = o.ha === "right" ? "end" : o.ha === "center" ? "middle" : "start";
+  out.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${((o.fs || 12) * K).toFixed(2)}" fill="${o.color || INK}"`
+    + ` text-anchor="${anchor}" dominant-baseline="central" font-family="${o.mono ? MONO : SANS}"`
+    + (o.mono ? ` style="white-space:pre"` : "") + (o.bold ? ` font-weight="bold"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + ` pointer-events="none">${esc(s)}</text>`);
+}
+function rect(x, y, w, h, o = {}) {
+  if (w <= 0 || h <= 0) return;
+  const lw = (o.lw || 1) * K;
+  out.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}"`
+    + ` fill="${o.fill || "none"}" stroke="${o.stroke || "none"}" stroke-width="${lw.toFixed(2)}"`
+    + (o.rx ? ` rx="${o.rx}"` : "") + (o.dash ? ` stroke-dasharray="${o.dash}"` : "")
+    + (o.alpha != null ? ` opacity="${o.alpha}"` : "")
+    + (o.cls ? ` class="${o.cls}" pointer-events="all"` : "") + (o.data || "") + `/>`);
+}
+function line(x1, y1, x2, y2, o = {}) {
+  const lw = (o.lw || 1) * K;
+  const dash = o.dashed ? ` stroke-dasharray="${(3.7 * lw).toFixed(1)} ${(2.4 * lw).toFixed(1)}"` : "";
+  out.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${o.color || INK}"`
+    + ` stroke-width="${lw.toFixed(2)}"${dash}` + (o.alpha != null ? ` opacity="${o.alpha}"` : "") + `/>`);
+}
+const DEFS = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">`
+  + `<rect width="7" height="7" fill="#f3f2ee"/><line x1="0" y1="0" x2="0" y2="7" stroke="#898781" stroke-width="1.6"/></pattern></defs>`;
+const HATCH = "url(#hatch)";
+
+// ---- numbers: 1s, 10ms; no space before the unit, no trailing zeros ----
+const strip = s => s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+function sec(v) {                      // a duration, given in s
+  if (v <= 0) return "0s";
+  if (v < 1) return Math.round(v * 1000) + "ms";
+  if (v < 10) return strip(v.toFixed(2)) + "s";
+  if (v < 100) return strip(v.toFixed(1)) + "s";
+  return Math.round(v) + "s";
+}
+function pct(f) {                      // a share, given as a fraction
+  const p = f * 100;
+  if (p <= 0.05) return "0%";
+  if (p < 1 || (p > 99 && p < 99.95)) return strip(p.toFixed(1)) + "%";
+  return Math.round(p) + "%";
+}
+const times = r => r < 10 ? strip(r.toFixed(1)) : String(Math.round(r));
+const num = n => n.toLocaleString("en-US");
+const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+
+// ---- the model: 32 CPUs, 64 fits; a fit = 2,000 small products of 0.5ms with 1 thread ----
+const CPUS = 32, FITS = 64, NPROD = 2000, SERIAL = 0.25, SLICE = 0.005;
+const WS = [1, 2, 4, 8, 16, 32], TS = [1, 2, 4, 8, 16, 32];
+const PRESETS = { A: [32, 1], B: [1, 32], C: [32, 32] };
+const speedup = T => 1 / (SERIAL + (1 - SERIAL) / T);       // Amdahl: a quarter of each product does not split
+function model(w, t) {
+  const N = w * t, rounds = Math.ceil(FITS / w), over = N > CPUS, o = N / CPUS, S = speedup(t);
+  const fit = over ? NPROD * o * SLICE : 1 / S;              // over: each part of each product holds a CPU for a slice
+  const sweep = rounds * fit;
+  const work = FITS / (CPUS * sweep);                        // 64 CPU-seconds of useful work in all
+  const idle = over ? 0 : 1 - N / CPUS;
+  return { w, t, N, rounds, over, o, S, fit, sweep, work, idle, wait: Math.max(0, 1 - work - idle) };
+}
+const BEST = model(32, 1);
+const optionOf = (w, t) => Object.keys(PRESETS).find(k => PRESETS[k][0] === w && PRESETS[k][1] === t) || null;
+let sel = { w: 32, t: 1 };
+
+function headline(m) {
+  return `${plural(m.w, "worker", "workers")} × ${plural(m.t, "BLAS thread", "BLAS threads")} = ${plural(m.N, "thread", "threads")} on 32 CPUs`;
+}
+function regime(m) {
+  if (m.N < CPUS) return [`${CPUS - m.N} of the 32 CPUs stay idle`, INK_2];
+  if (!m.over) return ["every CPU runs one thread", m.t === 1 ? GREEN : INK_2];
+  return [`${m.o} threads take turns on each CPU`, RED];
+}
+
+// ---- view 1: run the sweep with the chosen setting ----
+const LX0 = 260, LX1 = 1220;                                 // the sweep-time axis, 1s to 1000s, log scale
+const xs = v => LX0 + Math.min(Math.max(Math.log10(Math.max(v, 1)) / 3, 0), 1) * (LX1 - LX0);
+
+function workerGrid(n) {                                    // columns and rows for n workers
+  return { 1: [1, 1], 2: [2, 1], 4: [2, 2], 8: [4, 2], 16: [4, 4], 32: [8, 4] }[n];
+}
+
+function drawThreads(m, x, y, w, h, i, done) {
+  // the worker's T threads as bars: solid = working, hatched = waiting for partners, dashed = waiting for a CPU
+  const T = m.t, g = T >= 16 ? 1 : T >= 8 ? 2 : 4, bw = (w - (T - 1) * g) / T;
+  for (let j = 0; j < T; j++) {
+    const bx = x + j * (bw + g);
+    if (!m.over) {
+      const f = m.S / T, hs = h * f;
+      rect(bx, y + h - hs, bw, hs, { fill: WEDGE[i % 4] });
+      rect(bx, y, bw, h - hs, { fill: HATCH });
+    } else {
+      const hs = h / m.o;
+      rect(bx, y + h - hs, bw, hs, { fill: HATCH });
+      rect(bx, y, bw, h - hs, { fill: "#ffffff", stroke: MUTED, lw: 0.5, dash: "2 2" });
+    }
+  }
+}
+
+function drawRun(u) {
+  const m = model(sel.w, sel.t), tau = u * m.sweep, end = u >= 1 - EPS;
+  const R = end ? m.rounds : Math.min(Math.floor(tau / m.fit + EPS), m.rounds), frac = end ? 1 : tau / m.fit - R;
+  const [reg, regColor] = regime(m), opt = optionOf(m.w, m.t);
+  text(60, 46, headline(m), { fs: 22 });
+  text(60, 84, reg, { fs: 16, bold: true, color: regColor });
+  if (opt) text(1220, 46, `Option ${opt}`, { fs: 22, bold: true, ha: "right", color: opt === "A" ? GREEN : RED });
+
+  // level 1 and level 2: workers, each with its threads
+  text(60, 130, m.w === 1 ? "Level 1: 1 worker runs one fit at a time" : `Level 1: ${m.w} workers run fits side by side`, { fs: 14, bold: true });
+  text(60, 152, `Level 2: ${plural(m.t, "BLAS thread", "BLAS threads")} inside each worker (the bars)`, { fs: 13, color: INK_2 });
+  const [cols, rows] = workerGrid(m.w), gx = 10, GX0 = 60, GX1 = 600, GY0 = 172, GY1 = 562;
+  const bw = (GX1 - GX0 - (cols - 1) * gx) / cols, bh = (GY1 - GY0 - (rows - 1) * gx) / rows;
+  for (let i = 0; i < m.w; i++) {
+    const x = GX0 + (i % cols) * (bw + gx), y = GY0 + Math.floor(i / cols) * (bh + gx);
+    const done = end, fitNo = Math.min(R, m.rounds - 1) * m.w + i + 1, prog = done ? 1 : frac;
+    rect(x, y, bw, bh, { fill: "#ffffff", stroke: WEDGE[i % 4], lw: 1.2, rx: 6 });
+    const big = bw >= 120, hs = big ? 26 : 20;
+    text(x + 8, y + hs / 2 + 3, big ? `worker ${i + 1}` : `w${i + 1}`, { fs: big ? 12 : 9.5, bold: true });
+    if (big) text(x + bw - 8, y + hs / 2 + 3, done ? "done" : `fit ${fitNo}`, { fs: 12, ha: "right", color: INK_2 });
+    rect(x + 6, y + hs + 2, bw - 12, 6, { fill: "#f3f2ee" });
+    rect(x + 6, y + hs + 2, (bw - 12) * prog, 6, { fill: WEDGE[i % 4] });
+    drawThreads(m, x + 6, y + hs + 14, bw - 12, bh - hs - 20, i, done);
+  }
+
+  // the job's CPUs
+  text(680, 130, "The job's 32 CPUs, during the sweep", { fs: 14, bold: true });
+  const CX0 = 680, CW = (540 - 7 * 8) / 8, CH = 38, CY0 = 146;
+  for (let j = 0; j < CPUS; j++) {
+    const x = CX0 + (j % 8) * (CW + 8), y = CY0 + Math.floor(j / 8) * (CH + 8);
+    if (!m.over && j >= m.N) {
+      rect(x, y, CW, CH, { fill: "#ffffff", stroke: MUTED, lw: 0.8, rx: 4, dash: "4 3" });
+      text(x + CW / 2, y + CH / 2, "idle", { fs: 10, ha: "center", color: MUTED });
+    } else if (!m.over) {
+      const wk = Math.floor(j / m.t), f = m.S / m.t;
+      rect(x, y + CH * (1 - f), CW, CH * f, { fill: WEDGE[wk % 4] });
+      rect(x, y, CW, CH * (1 - f), { fill: HATCH });
+      rect(x, y, CW, CH, { stroke: WEDGE[wk % 4], lw: 1, rx: 0 });
+      text(x + CW / 2, y + CH / 2, `w${wk + 1}`, { fs: 10, ha: "center", bold: true });
+    } else {
+      const k = m.o, sw = CW / k;
+      for (let s = 0; s < k; s++) rect(x + s * sw, y, sw, CH, { fill: WFILL[Math.floor((j + CPUS * s) / m.t) % 4] });
+      rect(x, y + CH * 0.45, CW, CH * 0.55, { fill: HATCH, alpha: 0.85 });
+      rect(x, y, CW, CH, { stroke: RED, lw: 1 });
+      text(x + CW / 2, y + CH * 0.24, `×${k}`, { fs: 11, ha: "center", bold: true, color: RED });
+    }
+  }
+
+  // how the CPUs spend the sweep
+  const UY = 346;
+  text(680, UY, "How the 32 CPUs spend the sweep", { fs: 13, bold: true });
+  const parts = [["working", m.work, WORK[0], WORK[1]], ["waiting for other threads", m.wait, HATCH, MUTED], ["idle", m.idle, "#ffffff", MUTED]];
+  let ux = 680;
+  for (const [, f, fill] of parts) { rect(ux, UY + 14, 540 * f, 22, { fill }); ux += 540 * f; }
+  rect(680, UY + 14, 540, 22, { stroke: AXIS, lw: 0.8 });
+  let lx = 680;
+  for (const [name, f, , edge] of parts) {
+    if (f <= 0) continue;
+    text(lx, UY + 50, `${name} ${pct(f)}`, { fs: 12, bold: true, color: name === "working" ? WORK[1] : INK_2 });
+    lx += name === "idle" ? 0 : 230;
+  }
+
+  // the 64 fits
+  const doneN = Math.min(R * m.w, FITS), runN = end || R >= m.rounds ? 0 : m.w;
+  text(680, 430, end ? `The 64 fits: all done after ${sec(m.sweep)}` : `The 64 fits: ${doneN} done, ${runN} running`, { fs: 14, bold: true });
+  const FW = (540 - 15 * 4) / 16, FH = 24, FY0 = 446;
+  for (let f = 0; f < FITS; f++) {
+    const x = 680 + (f % 16) * (FW + 4), y = FY0 + Math.floor(f / 16) * (FH + 4), wk = f % m.w, r = Math.floor(f / m.w);
+    if (r < R || end) rect(x, y, FW, FH, { fill: WEDGE[wk % 4], alpha: 0.85 });
+    else if (r === R) {
+      rect(x, y, FW, FH, { fill: "#ffffff", stroke: WEDGE[wk % 4], lw: 1 });
+      rect(x, y, FW * frac, FH, { fill: WFILL[wk % 4] });
+    } else rect(x, y, FW, FH, { fill: "#ffffff", stroke: AXIS, lw: 0.8 });
+  }
+
+  legend(600);
+
+  // the sweep's time, on a log scale
+  text(60, 652, "Sweep time", { fs: 14, bold: true });
+  text(60, 684, end ? sec(m.sweep) : `t = ${sec(tau)}`, { fs: 22, bold: true, mono: !end, color: end ? (opt === "A" || m.sweep <= BEST.sweep + EPS ? GREEN : m.sweep >= 40 ? RED : INK) : INK });
+  const AY = 650;
+  for (const [k, [w, t]] of Object.entries(PRESETS)) {
+    const xv = xs(model(w, t).sweep);
+    line(xv, AY - 18, xv, AY + 20, { color: AXIS, dashed: true });
+    text(xv, AY - 28, `${k} ${sec(model(w, t).sweep)}`, { fs: 11, ha: "center", bold: true, color: INK_2 });
+  }
+  rect(LX0, AY - 8, xs(m.sweep) - LX0, 20, { stroke: INK_2, lw: 0.8, dash: "4 3" });
+  rect(LX0, AY - 8, xs(tau) - LX0, 20, { fill: m.over ? "#f4c7c0" : m.sweep <= 2.5 ? WORK[0] : "#e1e0d9" });
+  for (const [v, lab] of [[1, "1s"], [10, "10s"], [100, "100s"], [1000, "1000s"]]) {
+    line(xs(v), AY + 12, xs(v), AY + 18, { color: AXIS });
+    text(xs(v), AY + 32, lab, { fs: 11, ha: "center", color: MUTED });
+  }
+  text(LX1, AY + 52, "each mark is 10 times the one before", { fs: 10, ha: "right", color: MUTED });
+}
+
+function legend(y) {
+  let x = 60;
+  rect(x, y - 9, 18, 18, { fill: WEDGE[0] });
+  text(x + 26, y, "working", { fs: 12, color: INK_2 }); x += 100;
+  rect(x, y - 9, 18, 18, { fill: HATCH });
+  text(x + 26, y, "waiting for other threads", { fs: 12, color: INK_2 }); x += 262;
+  rect(x, y - 9, 18, 18, { fill: "#ffffff", stroke: MUTED, lw: 0.8, dash: "3 2" });
+  text(x + 26, y, "idle CPU, or a thread waiting for a CPU", { fs: 12, color: INK_2 });
+}
+
+function runSteps() {
+  const m = model(sel.w, sel.t), opt = optionOf(m.w, m.t), pre = opt ? `Option ${opt}: ` : "";
+  let first = `${pre}${headline(m)}. `;
+  if (m.N < CPUS) first += `${m.w === 1 ? "One worker runs one fit" : `${m.w} workers run ${m.w} fits`} at a time, and ${CPUS - m.N} of the 32 CPUs stay idle. `;
+  else if (!m.over) first += `${m.w === 1 ? "One worker runs one fit" : `${m.w} workers run ${m.w} fits`} at a time, and every CPU runs one thread. `;
+  else first += `${num(m.N)} threads take turns on 32 CPUs, ${m.o} on each. `;
+  if (m.t === 1) first += "Each fit runs on 1 thread, which works all the time.";
+  else if (!m.over) first += `Each fit splits its small products among ${m.t} threads, but gains only ${times(m.S)} times: `
+    + `its threads spend ${pct(1 - m.S / m.t)} of their time waiting for each other (hatched).`;
+  else first += `Every small product now waits until all its ${m.t} parts have had a turn on a CPU, as on Threads Inside the Libraries.`;
+  const steps = [{ t: 0, label: "start", text: first }];
+  steps.push({ t: 1 / m.rounds, label: sec(m.fit), text: `After ${sec(m.fit)}, the first ${m.w === 1 ? "fit is" : `${m.w} fits are`} done. `
+    + `${64 - m.w} to go: ${plural(m.rounds - 1, "more round", "more rounds")} of ${plural(m.w, "fit", "fits")}.` });
+  let last = `The sweep ends after ${sec(m.sweep)}. `;
+  if (m.w === BEST.w && m.t === BEST.t) last += "This is the fastest setting in the model: every CPU does useful work all the time. "
+    + "The fits are the natural parallel level, so BLAS gets 1 thread.";
+  else {
+    last += `That is ${times(m.sweep / BEST.sweep)} times as long as A (32 workers × 1 thread, 2s). `;
+    const bits = [`worked ${pct(m.work)} of the time`];
+    if (m.wait > 0.0005) bits.push(`waited for other threads ${pct(m.wait)}`);
+    if (m.idle > 0) bits.push(`stayed idle ${pct(m.idle)}`);
+    last += `The CPUs ${bits.join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
+    if (opt === "C") last += " Lecture 17 measured a collapse of the same order: 16 workers × 16 threads on 16 CPUs took 664s, against 1.6s with 1 thread each.";
+  }
+  steps.push({ t: 1, label: sec(m.sweep), text: last });
+  return steps;
+}
+
+// ---- view 2: every setting ----
+const TX0 = 250, TY0 = 172, TCW = 112, TCH = 64;
+function cellFill(m) { return m.over ? "#fbe3d8" : m.N === CPUS ? "#dff3e8" : "#eef1f6"; }
+
+const TOUR = [
+  { sel: [1, 1], on: m => m.w === 1 && m.t === 1, label: "1 × 1",
+    text: "1 worker × 1 thread: one fit at a time on one CPU, while the other 31 CPUs stay idle. The 64 fits take 64s." },
+  { sel: [8, 1], on: m => m.t === 1, label: "more workers",
+    text: "1 thread per worker, more workers: each time the workers double, the sweep takes half as long, from 64s with 1 worker to 2s with 32. Below 32 workers, some CPUs stay idle." },
+  { sel: [1, 32], on: m => m.w === 1, label: "more threads",
+    text: "1 worker, more threads: each fit splits its small products among the threads, but gains at most 3.7 times. With 32 threads every CPU is busy, yet the sweep takes 17.5s: the threads wait for each other most of the time." },
+  { sel: [4, 8], on: m => m.N === CPUS, label: "= 32",
+    text: "On the diagonal, workers × threads = 32: every CPU runs one thread. The more of the 32 go to workers, the faster: 17.5s, 9.5s, 5.5s, 3.5s, 2.5s and 2s." },
+  { sel: [32, 32], on: m => m.over, label: "> 32",
+    text: "Past the diagonal there are more threads than CPUs, and they take turns. Every small product waits until all its parts have had a turn on a CPU: 40s with 2 threads per worker, up to 640s with 32." },
+  { sel: [32, 1], on: m => optionOf(m.w, m.t) !== null, label: "A, B, C",
+    text: "The three options: A takes 2s, B 17.5s and C 640s. The 64 fits are independent, so they are the natural parallel level: 32 workers keep the 32 CPUs busy, and BLAS gets 1 thread." },
+];
+TOUR.forEach((s, i) => { s.t = i; });
+
+function drawTable(u) {
+  const k = Math.min(Math.floor(u + EPS), TOUR.length - 1), st = TOUR[k];
+  text(60, 46, "Every setting: the sweep's time", { fs: 22 });
+  text(60, 84, "64 fits on 32 CPUs, in the model. Rows: workers. Columns: BLAS threads per worker. Click a cell to pick it.", { fs: 15, color: INK_2 });
+  text(TX0 + 3 * TCW, 128, "BLAS threads per worker", { fs: 14, bold: true, ha: "center" });
+  text(TX0 - 70, 128, "Workers", { fs: 14, bold: true, ha: "center" });
+  TS.forEach((t, c) => text(TX0 + c * TCW + TCW / 2, 152, String(t), { fs: 14, ha: "center", color: INK_2 }));
+  WS.forEach((w, r) => {
+    text(TX0 - 70, TY0 + r * TCH + TCH / 2, String(w), { fs: 14, ha: "center", color: INK_2 });
+    TS.forEach((t, c) => {
+      const m = model(w, t), x = TX0 + c * TCW, y = TY0 + r * TCH, on = st.on(m), opt = optionOf(w, t);
+      const a = on ? 1 : 0.3;
+      rect(x + 2, y + 2, TCW - 4, TCH - 4, { fill: cellFill(m), alpha: a, rx: 6 });
+      if (m.N === CPUS) rect(x + 2, y + 2, TCW - 4, TCH - 4, { stroke: GREEN, lw: 1.2, rx: 6, alpha: a });
+      const col = m.sweep <= 2.5 ? GREEN : m.sweep >= 40 ? RED : INK;
+      const cx = x + TCW / 2 + (opt ? 10 : 0);
+      text(cx, y + TCH / 2 - 8, sec(m.sweep), { fs: 16, bold: true, ha: "center", color: col, alpha: a });
+      text(cx, y + TCH / 2 + 14, `${num(m.N)} thread${m.N > 1 ? "s" : ""}`, { fs: 10, ha: "center", color: MUTED, alpha: a });
+      if (opt) {
+        rect(x + 6, y + 6, 18, 18, { fill: INK, rx: 4, alpha: a });
+        text(x + 15, y + 15, opt, { fs: 11, bold: true, ha: "center", color: "#ffffff", alpha: a });
+      }
+      if (w === sel.w && t === sel.t) rect(x + 1, y + 1, TCW - 2, TCH - 2, { stroke: INK, lw: 2.4, rx: 7 });
+      rect(x, y, TCW, TCH, { cls: "seek", data: ` data-w="${w}" data-t="${t}"` });
+    });
+  });
+  // the selected setting
+  const m = model(sel.w, sel.t), [reg, regColor] = regime(m), RX = 975;
+  text(RX, 180, "Picked", { fs: 12, color: MUTED });
+  text(RX, 206, `${m.w} × ${m.t} = ${num(m.N)} threads`, { fs: 16, bold: true });
+  text(RX, 232, reg, { fs: 12, bold: true, color: regColor });
+  text(RX, 276, "Sweep", { fs: 12, color: MUTED });
+  text(RX, 304, sec(m.sweep), { fs: 26, bold: true, color: m.sweep <= 2.5 ? GREEN : m.sweep >= 40 ? RED : INK });
+  text(RX, 334, m.w === 32 && m.t === 1 ? "the fastest" : `${times(m.sweep / BEST.sweep)} times as long as A`, { fs: 12, color: INK_2 });
+  text(RX, 374, `One fit: ${sec(m.fit)}`, { fs: 13, color: INK_2 });
+  text(RX, 410, "The CPUs", { fs: 12, color: MUTED });
+  text(RX, 434, `working ${pct(m.work)}`, { fs: 13, bold: true, color: WORK[1] });
+  text(RX, 456, `waiting ${pct(m.wait)}`, { fs: 13, color: INK_2 });
+  text(RX, 478, `idle ${pct(m.idle)}`, { fs: 13, color: INK_2 });
+  text(RX, 530, "Watch it run: view 1", { fs: 12, color: MUTED });
+  // regions
+  let y = 588;
+  for (const [fill, stroke, lab] of [["#eef1f6", null, "workers × threads below 32: some CPUs stay idle"],
+    ["#dff3e8", GREEN, "workers × threads = 32: every CPU runs one thread"], ["#fbe3d8", null, "workers × threads above 32: threads take turns on the CPUs"]]) {
+    rect(TX0, y - 10, 20, 20, { fill, stroke: stroke || "none", lw: 1.2, rx: 4 });
+    text(TX0 + 30, y, lab, { fs: 13, color: INK_2 });
+    y += 28;
+  }
+  text(TX0, 690, "An illustrative model: see About the model, below the picture.", { fs: 12, color: MUTED });
+}
+
+// ---- the views ----
+const VIEWS = [{
+  id: "run", label: "Run the sweep", tmax: 1, snap: 0.001, steps: runSteps,
+  durs: [60, 40, 30, 20, 15, 10, 6, 4], dur: 4, durText: d => `a sweep in ${d}s`,
+  aria: "Position in the sweep",
+  keys: "Pick the workers and threads under the picture, or one of the options.",
+  draw: drawRun, setOnStep: false,
+}, {
+  id: "all", label: "Every setting", tmax: TOUR.length - 1, snap: 0.01, steps: () => TOUR,
+  durs: [60, 40, 30, 20, 15, 10, 6, 4], dur: 2, durText: d => `all steps in ${d}s`,
+  aria: "Step of the tour",
+  keys: "Click a cell to pick that setting, then view 1 to watch it run.",
+  draw: drawTable, setOnStep: true,
+}];
+
+// ---- steps ----
+function stepIndex(steps, t) {
+  let k = 0;
+  for (let i = 0; i < steps.length; i++) if (steps[i].t <= t + EPS) k = i;
+  return k;
+}
+
+// ---- page state ----
+const $ = id => document.getElementById(id);
+const svg = $("svg");
+let view = VIEWS[0], steps = [];
+const tOf = Object.fromEntries(VIEWS.map(v => [v.id, 0]));
+const speedOf = Object.fromEntries(VIEWS.map(v => [v.id, v.dur]));
+let playing = false, holding = false, shownStep = null;
+for (const v of VIEWS) {
+  try {
+    const saved = localStorage.getItem(`${KEY}-speed-${v.id}`), k = Number(saved);
+    if (saved !== null && saved !== "" && Number.isInteger(k) && k >= 0 && k < v.durs.length) speedOf[v.id] = k;
+  } catch (e) {}
+}
+
+function setT(t) { tOf[view.id] = Math.min(Math.max(Math.round(t * 1e4) / 1e4, 0), view.tmax); render(); }
+function stop() { playing = false; updatePlay(); }
+
+function render() {
+  const t = tOf[view.id];
+  const k = stepIndex(steps, t), key = view.id + ":" + k;
+  if (key !== shownStep) {
+    shownStep = key;
+    if (view.setOnStep && steps[k].sel) setSel(steps[k].sel[0], steps[k].sel[1], false);
+    showStep(k);
+  }
+  out = [DEFS];
+  view.draw(t);
+  svg.innerHTML = out.join("");
+  $("scrub").value = String(Math.round(t / view.snap));
+}
+
+function showStep(k) {
+  const s = steps[k];
+  $("stepNo").textContent = `Step ${k + 1} of ${steps.length}`;
+  $("stepTime").textContent = s.label;
+  $("caption").textContent = s.text;
+  svg.setAttribute("aria-label", `${view.label}, ${s.label}. ${s.text}`);
+  document.querySelectorAll("#ticks i").forEach((el, i) => el.classList.toggle("on", i === k));
+  const rows = document.querySelectorAll("#log .logrow");
+  rows.forEach((el, i) => el.classList.toggle("is-current", i === k));
+  const row = rows[k], list = $("log");
+  if (row) {
+    const top = row.parentElement.offsetTop, h = row.parentElement.offsetHeight;
+    if (top < list.scrollTop || top + h > list.scrollTop + list.clientHeight)
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2 + h / 2);
+  }
+}
+
+function buildViewChrome() {
+  steps = view.steps();
+  $("scrub").max = String(Math.round(view.tmax / view.snap));
+  $("scrub").setAttribute("aria-label", view.aria);
+  $("ticks").innerHTML = steps.map(s => `<i style="left:${(s.t / view.tmax * 100).toFixed(3)}%"></i>`).join("");
+  $("log").innerHTML = steps.map(s => `<li><button class="logrow" type="button" data-t="${s.t}"><span class="lt">${esc(s.label)}</span>`
+    + `<span class="lx">${esc(s.text)}</span></button></li>`).join("");
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.id === view.id)));
+  $("speed").max = String(view.durs.length - 1);
+  $("keys").innerHTML = "Hold <kbd>Space</kbd> to play, <kbd>←</kbd> <kbd>→</kbd> (or a clicker) to step, <kbd>P</kbd> to play "
+    + "or pause, <kbd>Home</kbd> to go back to the start, <kbd>1</kbd>–<kbd>2</kbd> to change view, <kbd>A</kbd> <kbd>B</kbd> "
+    + "<kbd>C</kbd> for the three options. " + view.keys;
+  updateSpeed();
+  shownStep = null;
+}
+
+function setView(id) {
+  const v = VIEWS.find(x => x.id === id);
+  if (!v || v === view && $("log").childElementCount) return;
+  view = v;
+  holding = false; stop();
+  buildViewChrome();
+  render();
+  try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+// the setting: workers and threads per worker
+function setSel(w, t, rerender = true) {
+  sel = { w, t };
+  document.querySelectorAll("#wSeg button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.w) === w)));
+  document.querySelectorAll("#tSeg button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.t) === t)));
+  const opt = optionOf(w, t);
+  document.querySelectorAll("#oSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.o === opt)));
+  if (!rerender) return;
+  if (view.id === "run") {
+    const keep = $("log").scrollTop;
+    buildViewChrome();
+    $("log").scrollTop = keep;
+  }
+  render();
+}
+
+function step(dir) {
+  stop();
+  const t = tOf[view.id];
+  if (dir > 0) { const nx = steps.find(s => s.t > t + EPS); setT(nx ? nx.t : view.tmax); }
+  else { let pv = null; for (const s of steps) if (s.t < t - EPS) pv = s; setT(pv ? pv.t : 0); }
+}
+
+function updatePlay() {
+  $("play").setAttribute("aria-pressed", String(playing));
+  $("playLabel").textContent = playing ? "Pause" : "Play";
+  $("playIcon").innerHTML = playing
+    ? '<rect x="3.5" y="3" width="3" height="10" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" fill="currentColor"/>'
+    : '<path d="M4 2.5v11L13.5 8z" fill="currentColor"/>';
+}
+function setHolding(on) {
+  holding = on && tOf[view.id] < view.tmax;
+  $("hold").classList.toggle("is-held", holding);
+}
+function updateSpeed() {
+  const k = speedOf[view.id];
+  $("speed").value = String(k);
+  $("speedOut").textContent = view.durText(view.durs[k]);
+}
+
+let last = performance.now();
+document.addEventListener("visibilitychange", () => { last = performance.now(); });
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  if (playing || holding) {
+    const t = tOf[view.id] + view.tmax / view.durs[speedOf[view.id]] * dt;
+    if (t >= view.tmax) { tOf[view.id] = view.tmax; playing = false; setHolding(false); updatePlay(); render(); }
+    else { tOf[view.id] = t; render(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- wiring ----
+$("tabs").hidden = VIEWS.length < 2;
+$("tabs").innerHTML = VIEWS.map((v, i) =>
+  `<button class="tab" role="tab" type="button" data-id="${v.id}" aria-selected="false" title="Key ${i + 1}">${esc(v.label)}</button>`).join("");
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) setView(b.dataset.id); });
+$("wSeg").insertAdjacentHTML("beforeend", WS.map(w => `<button type="button" data-w="${w}" aria-pressed="false">${w}</button>`).join(""));
+$("tSeg").insertAdjacentHTML("beforeend", TS.map(t => `<button type="button" data-t="${t}" aria-pressed="false">${t}</button>`).join(""));
+$("oSeg").insertAdjacentHTML("beforeend", Object.entries(PRESETS).map(([k, [w, t]]) =>
+  `<button type="button" data-o="${k}" aria-pressed="false" title="Key ${k}">${k}: ${w} × ${t}</button>`).join(""));
+$("wSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setSel(Number(b.dataset.w), sel.t); });
+$("tSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setSel(sel.w, Number(b.dataset.t)); });
+$("oSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setSel(...PRESETS[b.dataset.o]); });
+$("reset").addEventListener("click", () => { stop(); setT(0); });
+$("back").addEventListener("click", () => step(-1));
+$("fwd").addEventListener("click", () => step(1));
+$("play").addEventListener("click", () => {
+  if (!playing && tOf[view.id] >= view.tmax - EPS) tOf[view.id] = 0;
+  playing = !playing; updatePlay(); render();
+});
+const hold = $("hold");
+hold.addEventListener("pointerdown", e => { e.preventDefault(); try { hold.setPointerCapture(e.pointerId); } catch (_) {} setHolding(true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => setHolding(false));
+hold.addEventListener("contextmenu", e => e.preventDefault());
+hold.addEventListener("click", e => e.preventDefault());
+$("speed").addEventListener("input", e => {
+  speedOf[view.id] = Number(e.target.value); updateSpeed();
+  try { localStorage.setItem(`${KEY}-speed-${view.id}`, String(speedOf[view.id])); } catch (err) {}
+});
+$("scrub").addEventListener("input", e => { stop(); setT(Number(e.target.value) * view.snap); });
+$("log").addEventListener("click", e => { const b = e.target.closest(".logrow"); if (b) { stop(); setT(Number(b.dataset.t)); } });
+svg.addEventListener("click", e => {
+  const c = e.target.closest("[data-w]");
+  if (c) setSel(Number(c.dataset.w), Number(c.dataset.t));
+});
+window.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onRange = document.activeElement === $("speed") || document.activeElement === $("scrub");
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); if (!e.repeat) setHolding(true); }
+  else if ((e.key === "ArrowRight" && !onRange) || e.key === "PageDown") { e.preventDefault(); step(1); }  // PageDown/Up: clickers
+  else if ((e.key === "ArrowLeft" && !onRange) || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "p" || e.key === "P") { $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); stop(); setT(0); }
+  else if (e.key === "End") { e.preventDefault(); stop(); setT(view.tmax); }
+  else if (/^[abcABC]$/.test(e.key)) { setSel(...PRESETS[e.key.toUpperCase()]); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= VIEWS.length) { setView(VIEWS[Number(e.key) - 1].id); }
+});
+window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); setHolding(false); } });
+window.addEventListener("blur", () => setHolding(false));
+
+updatePlay();
+setSel(sel.w, sel.t, false);
+{
+  const fromHash = (location.hash || "").slice(1);
+  view = VIEWS.find(v => v.id === fromHash) || VIEWS[0];
+  buildViewChrome();
+  render();
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
